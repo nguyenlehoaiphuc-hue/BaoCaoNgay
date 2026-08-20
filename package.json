@@ -1,0 +1,9 @@
+{
+  "name": "bao-cao-ngay",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Bao cao KPI hang ngay - realtime qua Supabase, front-end tinh (khong can server)",
+  "scripts": {
+    "start": "npx serve public -l 3000"
+  }
+}

@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Báo cáo hàng ngày</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --blue: #4472C4;
+    --blue-dark: #33538c;
+    --row-alt: #E9F0FB;
+    --border: #B9C6DE;
+    --text: #1F2937;
+    --muted: #6B7280;
+    --live: #1a7f37;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin: 0;
+    padding: 32px 16px 60px;
+    background: #F3F5F9;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+  }
+  .sheet{
+    max-width: 920px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 14px rgba(30,41,59,.08);
+    padding: 36px 40px 28px;
+  }
+  .status{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .dot{ width: 8px; height: 8px; border-radius: 50%; background: #ccc; display: inline-block; }
+  .dot.on{ background: var(--live); }
+  .whoami{
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--blue-dark);
+    font-weight: 600;
+  }
+  .whoami .logout-link{
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .whoami .logout-link:hover{ text-decoration: underline; color: var(--text); }
+
+  h1{
+    text-align: center;
+    font-size: 30px;
+    letter-spacing: .5px;
+    margin: 0 0 6px;
+    color: var(--blue-dark);
+  }
+  .subtitle{
+    text-align: center;
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .subtitle input{
+    font: inherit;
+    font-weight: 700;
+    text-transform: uppercase;
+    text-align: center;
+    border: none;
+    border-bottom: 1px dashed transparent;
+    background: transparent;
+    color: inherit;
+    width: 150px;
+    padding: 0 2px;
+  }
+  .subtitle input:hover, .subtitle input:focus{
+    border-bottom-color: var(--blue);
+    outline: none;
+  }
+  .subtitle input[type="date"]{ width: 165px; }
+
+  table{
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 22px;
+    font-size: 14.5px;
+  }
+  thead th{
+    background: var(--blue);
+    color: #fff;
+    font-weight: 700;
+    text-align: left;
+    padding: 12px 14px;
+    border: 1px solid var(--blue);
+  }
+  th.col-num, td.col-num{ text-align: right; }
+  th.col-note, td.col-note{ width: 15%; }
+  th.col-who, td.col-who{ width: 16%; font-size: 12px; color: var(--muted); }
+  tbody td{
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tbody tr:nth-child(even){ background: var(--row-alt); }
+  tbody tr:nth-child(odd){ background: #fff; }
+
+  td[contenteditable="true"]{
+    cursor: text;
+    outline: none;
+    min-height: 1.2em;
+  }
+  td[contenteditable="true"]:hover{ box-shadow: inset 0 0 0 1px var(--blue); }
+  td[contenteditable="true"]:focus{
+    box-shadow: inset 0 0 0 2px var(--blue);
+    background: #fff;
+  }
+  td.flash-mine{ animation: flashMine 900ms ease-out; }
+  td.flash-other{ animation: flashOther 1400ms ease-out; }
+  @keyframes flashMine{ 0%{ background: #DCEEDD; } 100%{ background: inherit; } }
+  @keyframes flashOther{ 0%{ background: #FFF3CD; } 100%{ background: inherit; } }
+
+  .toolbar{
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 26px;
+    flex-wrap: wrap;
+  }
+  button{
+    font: inherit;
+    font-weight: 600;
+    font-size: 13.5px;
+    padding: 9px 18px;
+    border-radius: 7px;
+    border: 1px solid var(--blue);
+    background: var(--blue);
+    color: #fff;
+    cursor: pointer;
+  }
+  button.secondary{ background: #fff; color: var(--blue-dark); }
+  button:hover{ filter: brightness(1.06); }
+
+  .hint{
+    margin-top: 18px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.6;
+  }
+  .hint b{ color: var(--text); }
+
+  /* --- Who-am-I overlay --- */
+  .overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(31,41,55,.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .overlay.hidden{ display: none; }
+  .picker{
+    background: #fff;
+    border-radius: 14px;
+    padding: 32px 36px;
+    max-width: 420px;
+    width: 92%;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    text-align: center;
+  }
+  .picker h2{
+    margin: 0 0 4px;
+    font-size: 19px;
+    color: var(--blue-dark);
+  }
+  .picker p{
+    margin: 0 0 20px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .login-form{
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+  }
+  .login-form label{
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .login-form input{
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    font: inherit;
+  }
+  .login-form input:focus{
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px rgba(68,114,196,.15);
+  }
+  .login-form button{ width: 100%; margin-top: 4px; padding: 11px; }
+  .login-error{
+    color: #b42318;
+    font-size: 12.5px;
+    min-height: 16px;
+    text-align: center;
+  }
+  .name-setup{
+    display: none;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    background: #FFF8E6;
+    border: 1px solid #F2D98A;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 14px;
+    font-size: 12.5px;
+  }
+  .name-setup.show{ display: flex; flex-wrap: wrap; }
+  .name-setup input{
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font: inherit;
+    min-width: 160px;
+  }
+  .name-setup button{ padding: 7px 14px; font-size: 12.5px; }
+
+  @media print{
+    body{ background: #fff; padding: 0; }
+    .sheet{ box-shadow: none; padding: 0; }
+    .toolbar, .hint, .status{ display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="overlay" class="overlay hidden">
+  <div class="picker">
+    <h2>Đăng nhập</h2>
+    <p>Dùng tài khoản được cấp cho phòng để vào cập nhật báo cáo.</p>
+    <form class="login-form" id="loginForm">
+      <div>
+        <label for="loginEmail">Tên đăng nhập</label>
+        <input type="text" id="loginEmail" autocomplete="username" required>
+      </div>
+      <div>
+        <label for="loginPassword">Mật khẩu</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+      </div>
+      <div class="login-error" id="loginError"></div>
+      <button type="submit" id="loginSubmit">Đăng nhập</button>
+    </form>
+  </div>
+</div>
+
+<div class="sheet">
+  <div class="status">
+    <span class="dot" id="liveDot"></span><span id="liveText">Đang kết nối...</span>
+    <span class="whoami" id="whoami" style="display:none">
+      <span id="whoamiName"></span>
+      <span class="logout-link" id="logoutBtn">Đăng xuất</span>
+    </span>
+  </div>
+
+  <h1>BÁO CÁO HÀNG NGÀY</h1>
+  <div class="subtitle">
+    PHÒNG <input type="text" id="roomName" spellcheck="false">
+    NGÀY <input type="date" id="reportDate">
+  </div>
+
+  <div class="name-setup" id="nameSetup">
+    <span>Bạn chưa có tên hiển thị —</span>
+    <input type="text" id="nameSetupInput" placeholder="Nhập tên của bạn...">
+    <button id="nameSetupSave">Lưu</button>
+  </div>
+
+  <table id="kpiTable">
+    <thead>
+      <tr>
+        <th style="width:32%">Chỉ tiêu KPI</th>
+        <th style="width:15%">Đơn vị tính</th>
+        <th class="col-num" style="width:12%">Thực hiện</th>
+        <th class="col-note">Ghi chú</th>
+        <th class="col-who">Người cập nhật</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="toolbar">
+    <button class="secondary" id="csvBtn">⬇ Xuất CSV</button>
+    <button class="secondary" id="printBtn">🖨 In / PDF</button>
+  </div>
+
+  <div class="hint">
+    Mọi thay đổi được <b>lưu và đồng bộ tự động</b> tới tất cả mọi người đang mở trang này —
+    không cần bấm lưu. Đổi ngày ở trên để xem/nhập báo cáo của ngày khác.
+  </div>
+</div>
+
+<script>
+// ==== Cấu hình Supabase — điền URL + anon key sau khi tạo project ====
+const SUPABASE_URL = 'https://uidxtpynyefnyfzxepxb.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_zNmbMbsyeOyC_M6mI5xh4A_NSUJIK7F';
+
+// Supabase Auth luôn cần dạng email. Để đăng nhập bằng "tên đăng nhập" thay vì email thật,
+// domain giả này được ghép vào phía sau — khi tạo user trong Supabase Dashboard, đặt email là
+// "tenuser@baocaongay.local" (đúng domain bên dưới) và người dùng chỉ cần gõ "tenuser".
+const LOGIN_DOMAIN = 'baocaongay.local';
+
+const DEFAULT_ROWS = [
+  { name: 'Số lượng KH mới', unit: 'Khách hàng' },
+  { name: 'Delta tăng trưởng dư nợ tín dụng', unit: 'Tỷ đồng' },
+  { name: 'Delta tăng trưởng Nguồn vốn', unit: 'Tỷ đồng' },
+  { name: 'Tăng thu phí', unit: 'Triệu đồng' },
+  { name: 'Lợi nhuận kinh doanh ngoại tệ', unit: 'Triệu đồng' },
+  { name: 'Thu hồi nợ Nhóm 2, NX, XLRR', unit: 'Triệu đồng' },
+  { name: 'Doanh thu Bảo hiểm VBI', unit: 'Triệu đồng' },
+  { name: 'Doanh thu Bảo hiểm MVL', unit: 'Triệu đồng' }
+];
+
+(function(){
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const dateInput = document.getElementById('reportDate');
+  const roomInput = document.getElementById('roomName');
+  const tbody = document.querySelector('#kpiTable tbody');
+  const liveDot = document.getElementById('liveDot');
+  const liveText = document.getElementById('liveText');
+  const overlay = document.getElementById('overlay');
+  const loginForm = document.getElementById('loginForm');
+  const loginError = document.getElementById('loginError');
+  const loginSubmit = document.getElementById('loginSubmit');
+  const whoamiEl = document.getElementById('whoami');
+  const whoamiName = document.getElementById('whoamiName');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const nameSetup = document.getElementById('nameSetup');
+  const nameSetupInput = document.getElementById('nameSetupInput');
+  const nameSetupSave = document.getElementById('nameSetupSave');
+
+  let currentDate = null;
+  let currentChannel = null;
+  let currentUser = null;   // Supabase auth user
+  let userName = '';        // display name shown in "Người cập nhật"
+
+  function todayISO(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  // ---- Auth ----
+  async function loadProfile(user){
+    const { data: profile } = await sb
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    userName = (profile && profile.full_name) || user.email.split('@')[0];
+    whoamiName.textContent = '👤 ' + userName;
+    whoamiEl.style.display = 'flex';
+    nameSetup.classList.toggle('show', !(profile && profile.full_name));
+  }
+
+  loginForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    loginError.textContent = '';
+    loginSubmit.disabled = true;
+    loginSubmit.textContent = 'Đang đăng nhập...';
+    const username = document.getElementById('loginEmail').value.trim().toLowerCase();
+    const password = document.getElementById('loginPassword').value;
+    const email = username.includes('@') ? username : username + '@' + LOGIN_DOMAIN;
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    loginSubmit.disabled = false;
+    loginSubmit.textContent = 'Đăng nhập';
+    if (error) loginError.textContent = 'Sai tên đăng nhập hoặc mật khẩu.';
+  });
+
+  logoutBtn.addEventListener('click', async () => {
+    await sb.auth.signOut();
+  });
+
+  nameSetupSave.addEventListener('click', async () => {
+    const name = nameSetupInput.value.trim();
+    if (!name || !currentUser) return;
+    await sb.from('profiles').upsert({ id: currentUser.id, full_name: name });
+    userName = name;
+    whoamiName.textContent = '👤 ' + userName;
+    nameSetup.classList.remove('show');
+  });
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session && session.user) {
+      currentUser = session.user;
+      overlay.classList.add('hidden');
+      loadProfile(currentUser);
+      loadDate(currentDate || dateInput.value);
+    } else {
+      currentUser = null;
+      userName = '';
+      whoamiEl.style.display = 'none';
+      nameSetup.classList.remove('show');
+      overlay.classList.remove('hidden');
+    }
+  });
+
+  function renderRows(rows){
+    tbody.innerHTML = '';
+    DEFAULT_ROWS.forEach((def, i) => {
+      const row = rows.find(r => r.row_index === i) || { value: '', note: '', who: '' };
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + def.name + '</td>' +
+        '<td>' + def.unit + '</td>' +
+        '<td class="col-num" contenteditable="true" data-row="' + i + '" data-field="value">' + (row.value || '') + '</td>' +
+        '<td class="col-note" contenteditable="true" data-row="' + i + '" data-field="note">' + (row.note || '') + '</td>' +
+        '<td class="col-who">' + (row.who || '') + '</td>';
+      tbody.appendChild(tr);
+    });
+    bindCellEvents();
+  }
+
+  function bindCellEvents(){
+    tbody.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
+      cell.addEventListener('focus', () => {
+        if (!currentUser) cell.blur();
+      });
+      cell.addEventListener('blur', async () => {
+        if (!currentUser) return;
+        const rowIndex = parseInt(cell.getAttribute('data-row'), 10);
+        const field = cell.getAttribute('data-field');
+        const value = cell.textContent.trim();
+        const who = userName + ' · ' + nowStamp();
+
+        cell.classList.add('flash-mine');
+        setTimeout(() => cell.classList.remove('flash-mine'), 900);
+        cell.closest('tr').querySelector('.col-who').textContent = who;
+
+        const payload = {
+          report_date: currentDate,
+          row_index: rowIndex,
+          kpi_name: DEFAULT_ROWS[rowIndex].name,
+          unit: DEFAULT_ROWS[rowIndex].unit,
+          who,
+          updated_at: new Date().toISOString()
+        };
+        payload[field] = value;
+        await sb.from('daily_reports').upsert(payload, { onConflict: 'report_date,row_index' });
+      });
+    });
+  }
+
+  function nowStamp(){
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' ' + pad(d.getDate()) + '/' + pad(d.getMonth()+1);
+  }
+
+  async function loadDate(date){
+    currentDate = date;
+
+    if (currentChannel) {
+      await sb.removeChannel(currentChannel);
+      currentChannel = null;
+    }
+
+    const { data: rows } = await sb
+      .from('daily_reports')
+      .select('*')
+      .eq('report_date', date);
+
+    renderRows(rows || []);
+
+    const { data: meta } = await sb
+      .from('report_meta')
+      .select('room')
+      .eq('report_date', date)
+      .maybeSingle();
+
+    roomInput.value = (meta && meta.room) || 'TÂY THẠNH';
+
+    currentChannel = sb
+      .channel('report-' + date)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'daily_reports', filter: 'report_date=eq.' + date
+      }, payload => {
+        const row = payload.new;
+        if (!row) return;
+        applyRemoteRow(row);
+      })
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'report_meta', filter: 'report_date=eq.' + date
+      }, payload => {
+        const row = payload.new;
+        if (row && document.activeElement !== roomInput) roomInput.value = row.room || '';
+      })
+      .subscribe(status => {
+        const on = status === 'SUBSCRIBED';
+        liveDot.classList.toggle('on', on);
+        liveText.textContent = on ? 'Đang cập nhật trực tiếp' : 'Đang kết nối...';
+      });
+  }
+
+  function applyRemoteRow(row){
+    ['value', 'note'].forEach(field => {
+      const cell = tbody.querySelector('td[data-row="' + row.row_index + '"][data-field="' + field + '"]');
+      if (!cell) return;
+      if (document.activeElement !== cell && cell.textContent.trim() !== (row[field] || '')) {
+        cell.textContent = row[field] || '';
+        cell.classList.add('flash-other');
+        setTimeout(() => cell.classList.remove('flash-other'), 1400);
+      }
+    });
+    const whoCell = tbody.querySelector('td[data-row="' + row.row_index + '"][data-field="value"]')?.closest('tr')?.querySelector('.col-who');
+    if (whoCell) whoCell.textContent = row.who || '';
+  }
+
+  dateInput.addEventListener('change', () => loadDate(dateInput.value));
+
+  roomInput.addEventListener('focus', () => { if (!currentUser) roomInput.blur(); });
+  roomInput.addEventListener('blur', async () => {
+    if (!currentUser) return;
+    await sb.from('report_meta').upsert(
+      { report_date: currentDate, room: roomInput.value },
+      { onConflict: 'report_date' }
+    );
+  });
+
+  document.getElementById('printBtn').addEventListener('click', () => window.print());
+
+  document.getElementById('csvBtn').addEventListener('click', () => {
+    const rows = [['Chỉ tiêu KPI','Đơn vị tính','Thực hiện','Ghi chú','Người cập nhật']];
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const cells = tr.querySelectorAll('td');
+      rows.push(Array.prototype.map.call(cells, td => '"' + td.textContent.replace(/"/g,'""').trim() + '"'));
+    });
+    const csv = '﻿' + rows.map(r => r.join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bao-cao-ngay-' + (currentDate || 'export') + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // --- init ---
+  // sb.auth.onAuthStateChange (above) fires immediately with the current
+  // session on load, so it drives both the logged-out overlay and the
+  // first loadDate() call once a session is present.
+  if (!dateInput.value) dateInput.value = todayISO();
+})();
+</script>
+</body>
+</html>
