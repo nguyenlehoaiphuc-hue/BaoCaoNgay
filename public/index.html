@@ -70,6 +70,32 @@
   }
   .role-badge.leader{ background: #FDECC8; color: #92620A; }
 
+  .pw-change{
+    display: none;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    background: #F5F8FE;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 14px;
+    font-size: 12.5px;
+  }
+  .pw-change.show{ display: flex; }
+  .pw-change input{
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font: inherit;
+    min-width: 170px;
+  }
+  .pw-change button{ padding: 7px 14px; font-size: 12.5px; }
+  .pw-msg{ font-size: 12px; color: var(--muted); width: 100%; text-align: center; }
+  .pw-msg.error{ color: #b42318; }
+  .pw-msg.ok{ color: var(--live); }
+
   #reportCapture{
     background: #fff;
     padding: 6px 2px 2px;
@@ -90,25 +116,10 @@
     display: flex;
     justify-content: center;
     align-items: baseline;
-    gap: 3px;
+    gap: 7px;
     flex-wrap: wrap;
   }
-  .subtitle input{
-    font: inherit;
-    font-weight: 700;
-    text-transform: uppercase;
-    text-align: center;
-    border: none;
-    border-bottom: 1px dashed transparent;
-    background: transparent;
-    color: inherit;
-    padding: 0 2px;
-  }
-  .subtitle input:hover, .subtitle input:focus{
-    border-bottom-color: var(--blue);
-    outline: none;
-  }
-  .subtitle input#roomName{ width: 15ch; }
+  #deptName{ color: inherit; }
   .date-field{
     display: inline-flex;
     align-items: baseline;
@@ -124,7 +135,7 @@
      CSS, nên phải ẩn cả control bằng opacity thì mới chắc chắn không lộ định dạng gốc của máy.
      Chữ dd/mm/yyyy thật sự nhìn thấy là ở .date-display bên dưới; input vẫn nhận chạm/click
      để mở lịch vì nó nằm trên cùng, chỉ là vô hình. */
-  .subtitle input[type="date"]{
+  .date-input-wrap input[type="date"]{
     position: absolute;
     inset: 0;
     width: 100%;
@@ -133,6 +144,8 @@
     cursor: pointer;
     margin: 0;
     padding: 0;
+    border: none;
+    background: transparent;
   }
   .date-display{
     display: flex;
@@ -241,7 +254,7 @@
   }
   .hint b{ color: var(--text); }
 
-  /* --- Who-am-I overlay --- */
+  /* --- Login overlay --- */
   .overlay{
     position: fixed;
     inset: 0;
@@ -328,7 +341,7 @@
   @media print{
     body{ background: #fff; padding: 0; }
     .sheet{ box-shadow: none; padding: 0; }
-    .toolbar, .hint, .status{ display: none; }
+    .toolbar, .hint, .status, .pw-change{ display: none; }
   }
 
   @media (max-width: 640px){
@@ -338,11 +351,10 @@
       border-radius: 8px;
     }
     .status{ flex-wrap: wrap; row-gap: 6px; }
-    .whoami{ margin-left: 0; width: 100%; justify-content: center; }
+    .whoami{ margin-left: 0; width: 100%; justify-content: center; flex-wrap: wrap; }
 
     h1{ font-size: 21px; letter-spacing: .2px; }
     .subtitle{ font-size: 12.5px; }
-    .subtitle input#roomName{ width: 13ch; }
 
     .view-toggle{ margin-top: 16px; }
     .toggle-btn{ flex: 1; padding: 8px 10px; font-size: 12px; }
@@ -356,8 +368,8 @@
     .toolbar button{ flex: 1 1 auto; min-width: 104px; padding: 10px 10px; font-size: 12.5px; }
 
     .picker{ padding: 24px 20px; }
-    .name-setup{ font-size: 12px; }
-    .name-setup input{ min-width: 120px; }
+    .name-setup, .pw-change{ font-size: 12px; }
+    .name-setup input, .pw-change input{ min-width: 120px; }
   }
 </style>
 </head>
@@ -366,7 +378,7 @@
 <div id="overlay" class="overlay hidden">
   <div class="picker">
     <h2>Đăng nhập</h2>
-    <p>Dùng tài khoản được cấp cho phòng để vào cập nhật báo cáo.</p>
+    <p>Dùng tài khoản được cấp cho phòng ban để vào cập nhật báo cáo.</p>
     <form class="login-form" id="loginForm">
       <div>
         <label for="loginEmail">Tên đăng nhập</label>
@@ -388,14 +400,22 @@
     <span class="whoami" id="whoami" style="display:none">
       <span id="whoamiName"></span>
       <span class="role-badge" id="roleBadge"></span>
+      <span class="logout-link" id="changePwBtn">Đổi mật khẩu</span>
       <span class="logout-link" id="logoutBtn">Đăng xuất</span>
     </span>
+  </div>
+
+  <div class="pw-change" id="pwChange">
+    <input type="password" id="newPassword" placeholder="Mật khẩu mới (tối thiểu 6 ký tự)">
+    <input type="password" id="confirmPassword" placeholder="Nhập lại mật khẩu mới">
+    <button id="pwSaveBtn" type="button">Lưu</button>
+    <span class="pw-msg" id="pwMsg"></span>
   </div>
 
   <div id="reportCapture">
     <h1>BÁO CÁO HÀNG NGÀY</h1>
     <div class="subtitle">
-      <input type="text" id="roomName" spellcheck="false">
+      <span id="deptName"></span>
       <span class="date-field">NGÀY
         <span class="date-input-wrap">
           <input type="date" id="reportDate">
@@ -469,7 +489,7 @@ const DEFAULT_ROWS = [
 
   const dateInput = document.getElementById('reportDate');
   const dateDisplay = document.getElementById('dateDisplay');
-  const roomInput = document.getElementById('roomName');
+  const deptNameEl = document.getElementById('deptName');
   const thead = document.getElementById('kpiThead');
   const tbody = document.getElementById('kpiTbody');
   const liveDot = document.getElementById('liveDot');
@@ -488,6 +508,12 @@ const DEFAULT_ROWS = [
   const viewToggle = document.getElementById('viewToggle');
   const viewSummaryBtn = document.getElementById('viewSummaryBtn');
   const viewDetailBtn = document.getElementById('viewDetailBtn');
+  const changePwBtn = document.getElementById('changePwBtn');
+  const pwChange = document.getElementById('pwChange');
+  const newPasswordInput = document.getElementById('newPassword');
+  const confirmPasswordInput = document.getElementById('confirmPassword');
+  const pwSaveBtn = document.getElementById('pwSaveBtn');
+  const pwMsg = document.getElementById('pwMsg');
 
   const STAFF_HEAD = '<tr>' +
     '<th style="width:30%">Chỉ tiêu KPI</th>' +
@@ -499,19 +525,13 @@ const DEFAULT_ROWS = [
 
   let currentDate = null;
   let currentChannel = null;
-  let currentUser = null;   // Supabase auth user
-  let currentRole = 'staff'; // 'staff' | 'leader'
-  let userName = '';        // display name shown in "Người cập nhật"
-  let staffList = [];       // [{id, full_name}] — dùng cho bảng tổng hợp của lãnh đạo
+  let currentUser = null;       // Supabase auth user
+  let currentRole = 'staff';    // 'staff' | 'leader'
+  let currentDepartment = '';   // phòng ban của user đang đăng nhập
+  let userName = '';            // display name shown in "Người cập nhật"
+  let staffList = [];           // [{id, full_name}] — nhân viên CÙNG phòng ban, dùng cho bảng tổng hợp
   let leaderViewMode = 'summary'; // 'summary' | 'detail' — chỉ áp dụng cho lãnh đạo
-  let lastLeaderRows = [];  // cache để đổi chế độ xem không cần fetch lại
-
-  function resizeRoomInput(){
-    // +4 vì chữ hoa đậm (uppercase, bold) rộng hơn đáng kể so với đơn vị "ch" mặc định,
-    // thiếu buffer sẽ làm mất/cắt chữ cuối trong ô.
-    roomInput.style.width = Math.max(8, roomInput.value.length + 4) + 'ch';
-  }
-  roomInput.addEventListener('input', resizeRoomInput);
+  let lastLeaderRows = [];      // cache để đổi chế độ xem không cần fetch lại
 
   function updateDateDisplay(){
     const parts = (dateInput.value || '').split('-'); // yyyy-mm-dd
@@ -528,27 +548,29 @@ const DEFAULT_ROWS = [
   async function loadProfile(user){
     const { data: profile } = await sb
       .from('profiles')
-      .select('full_name, role')
+      .select('full_name, role, department')
       .eq('id', user.id)
       .maybeSingle();
 
     userName = (profile && profile.full_name) || user.email.split('@')[0];
     currentRole = (profile && profile.role) || 'staff';
+    currentDepartment = (profile && profile.department) || '';
 
     whoamiName.textContent = '👤 ' + userName;
     roleBadge.textContent = currentRole === 'leader' ? 'Lãnh đạo' : 'Nhân viên';
     roleBadge.classList.toggle('leader', currentRole === 'leader');
     whoamiEl.style.display = 'flex';
     nameSetup.classList.toggle('show', !(profile && profile.full_name));
+    deptNameEl.textContent = currentDepartment;
 
-    roomInput.readOnly = (currentRole === 'leader');
     viewToggle.style.display = (currentRole === 'leader') ? 'flex' : 'none';
 
-    if (currentRole === 'leader' && staffList.length === 0) {
+    if (currentRole === 'leader') {
       const { data: staff } = await sb
         .from('profiles')
         .select('id, full_name')
         .eq('role', 'staff')
+        .eq('department', currentDepartment)
         .order('full_name', { ascending: true });
       staffList = staff || [];
     }
@@ -572,6 +594,43 @@ const DEFAULT_ROWS = [
     await sb.auth.signOut();
   });
 
+  changePwBtn.addEventListener('click', () => {
+    pwMsg.textContent = '';
+    pwMsg.className = 'pw-msg';
+    newPasswordInput.value = '';
+    confirmPasswordInput.value = '';
+    pwChange.classList.toggle('show');
+  });
+
+  pwSaveBtn.addEventListener('click', async () => {
+    const p1 = newPasswordInput.value;
+    const p2 = confirmPasswordInput.value;
+    pwMsg.className = 'pw-msg';
+    if (p1.length < 6) {
+      pwMsg.textContent = 'Mật khẩu phải từ 6 ký tự trở lên.';
+      pwMsg.classList.add('error');
+      return;
+    }
+    if (p1 !== p2) {
+      pwMsg.textContent = 'Hai mật khẩu chưa khớp nhau.';
+      pwMsg.classList.add('error');
+      return;
+    }
+    pwSaveBtn.disabled = true;
+    const { error } = await sb.auth.updateUser({ password: p1 });
+    pwSaveBtn.disabled = false;
+    if (error) {
+      pwMsg.textContent = 'Không đổi được: ' + error.message;
+      pwMsg.classList.add('error');
+      return;
+    }
+    pwMsg.textContent = 'Đã đổi mật khẩu thành công.';
+    pwMsg.classList.add('ok');
+    newPasswordInput.value = '';
+    confirmPasswordInput.value = '';
+    setTimeout(() => pwChange.classList.remove('show'), 1500);
+  });
+
   nameSetupSave.addEventListener('click', async () => {
     const name = nameSetupInput.value.trim();
     if (!name || !currentUser) return;
@@ -590,10 +649,12 @@ const DEFAULT_ROWS = [
     } else {
       currentUser = null;
       currentRole = 'staff';
+      currentDepartment = '';
       staffList = [];
       userName = '';
       whoamiEl.style.display = 'none';
       nameSetup.classList.remove('show');
+      pwChange.classList.remove('show');
       overlay.classList.remove('hidden');
     }
   });
@@ -754,15 +815,9 @@ const DEFAULT_ROWS = [
       renderStaffRows(rows || []);
     }
 
-    const { data: meta } = await sb
-      .from('report_meta')
-      .select('room')
-      .eq('report_date', date)
-      .maybeSingle();
-
-    roomInput.value = (meta && meta.room) || 'PGD TÂY THẠNH';
-    resizeRoomInput();
-
+    // Lưu ý: kênh realtime chỉ lọc theo report_date (không lọc theo phòng ban) — Row Level
+    // Security ở phía Supabase mới là nơi thực sự chặn không cho thấy dữ liệu phòng khác,
+    // filter ở đây chỉ để giảm số sự kiện không liên quan tới ngày đang xem.
     currentChannel = sb
       .channel('report-' + date)
       .on('postgres_changes', {
@@ -774,12 +829,6 @@ const DEFAULT_ROWS = [
           const row = payload.new;
           if (row) applyRemoteRow(row);
         }
-      })
-      .on('postgres_changes', {
-        event: '*', schema: 'public', table: 'report_meta', filter: 'report_date=eq.' + date
-      }, payload => {
-        const row = payload.new;
-        if (row && document.activeElement !== roomInput) roomInput.value = row.room || '';
       })
       .subscribe(status => {
         const on = status === 'SUBSCRIBED';
@@ -804,15 +853,6 @@ const DEFAULT_ROWS = [
 
   dateInput.addEventListener('change', () => { updateDateDisplay(); loadDate(dateInput.value); });
 
-  roomInput.addEventListener('focus', () => { if (!currentUser || currentRole === 'leader') roomInput.blur(); });
-  roomInput.addEventListener('blur', async () => {
-    if (!currentUser || currentRole === 'leader') return;
-    await sb.from('report_meta').upsert(
-      { report_date: currentDate, room: roomInput.value },
-      { onConflict: 'report_date' }
-    );
-  });
-
   document.getElementById('printBtn').addEventListener('click', () => window.print());
 
   document.getElementById('imageBtn').addEventListener('click', async () => {
@@ -835,7 +875,7 @@ const DEFAULT_ROWS = [
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'bao-cao-ngay-' + (currentDate || 'export') + '.png';
+        a.download = 'bao-cao-' + (currentDepartment || 'ngay') + '-' + (currentDate || 'export') + '.png';
         a.click();
         URL.revokeObjectURL(url);
       }, 'image/png');
@@ -857,7 +897,7 @@ const DEFAULT_ROWS = [
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'bao-cao-ngay-' + (currentDate || 'export') + '.csv';
+    a.download = 'bao-cao-' + (currentDepartment || 'ngay') + '-' + (currentDate || 'export') + '.csv';
     a.click();
     URL.revokeObjectURL(url);
   });

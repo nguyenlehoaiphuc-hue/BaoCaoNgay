@@ -9,18 +9,23 @@ Có 2 vai trò:
 - **Nhân viên** — nhập và chỉ nhìn thấy số liệu của chính mình.
 - **Lãnh đạo** — xem bảng tổng hợp (từng nhân viên + cột Tổng), không nhập được số.
 
-## Có 2 file — dùng cho 1 phòng hay nhiều phòng ban
+## Có 2 bản — `index.html` là bản đang chạy (nhiều phòng ban)
 
-- [`public/index.html`](public/index.html) — bản gốc cho **1 phòng duy nhất** (PGD Tây Thạnh),
-  có ô "Phòng" gõ tự do.
-- [`public/bao-cao-chi-nhanh.html`](public/bao-cao-chi-nhanh.html) — bản mở rộng cho **nhiều
-  phòng ban cùng lúc** (7 phòng: Phòng DVKH, Phòng Bán Lẻ, Phòng Doanh Nghiệp, Phòng KTTH,
-  PGD Tây Thạnh, PGD Hưng Phát, PGD Phan Đăng Lưu). Mỗi tài khoản gắn cố định với 1 phòng ban;
-  lãnh đạo chỉ xem tổng hợp của đúng phòng ban mình, không thấy phòng khác. File này còn có thêm
-  nút **"Đổi mật khẩu"** để mỗi người tự đặt lại mật khẩu sau khi admin cấp tài khoản ban đầu.
+- [`public/index.html`](public/index.html) = [`public/bao-cao-chi-nhanh.html`](public/bao-cao-chi-nhanh.html)
+  (2 file giống hệt nhau) — bản chính thức đang deploy, hỗ trợ **7 phòng ban**: Phòng DVKH,
+  Phòng Bán Lẻ, Phòng Doanh Nghiệp, Phòng KTTH, PGD Tây Thạnh, PGD Hưng Phát, PGD Phan Đăng Lưu.
+  Mỗi tài khoản gắn cố định với 1 phòng ban; lãnh đạo chỉ xem tổng hợp của đúng phòng ban mình,
+  không thấy phòng khác. Có thêm nút **"Đổi mật khẩu"** để mỗi người tự đặt lại mật khẩu sau khi
+  admin cấp tài khoản ban đầu. `index.html` là file được host tự phục vụ ở link gốc trên Render
+  (mọi static host đều tự lấy `index.html` làm trang mặc định của link gốc, không cần cấu hình
+  redirect gì thêm) — sửa nội dung thì nhớ sửa cả 2 file cho khớp nhau, hoặc chỉ cần giữ 1 file
+  và xoá file kia nếu muốn gọn.
+- [`public/bao-cao-tay-thanh.html`](public/bao-cao-tay-thanh.html) — bản gốc cũ, chỉ cho
+  **1 phòng duy nhất** (PGD Tây Thạnh), có ô "Phòng" gõ tự do, không phân biệt phòng ban. Giữ lại
+  để tham khảo/rollback, không còn là bản chính đang dùng.
 
-Cả 2 file dùng chung 1 Supabase project — chạy đúng thứ tự file migration bên dưới để nâng cấp
-database hỗ trợ cả 2.
+Cả các file dùng chung 1 Supabase project — chạy đúng thứ tự file migration bên dưới để nâng cấp
+database hỗ trợ đầy đủ.
 
 ## 1. Tạo Supabase project
 
@@ -62,7 +67,7 @@ Mặc định mọi tài khoản mới đều là **staff** (nhân viên). Sau k
 > làm bước gán role ở trên. **Lưu ý**: migration này xoá sạch dữ liệu test đã nhập trong
 > `daily_reports` vì đổi cấu trúc bảng.
 
-### Muốn dùng bản nhiều phòng ban (`bao-cao-chi-nhanh.html`)?
+### Muốn dùng bản nhiều phòng ban (`index.html` / `bao-cao-chi-nhanh.html`)?
 
 Chạy tiếp file [`supabase/migration_departments.sql`](supabase/migration_departments.sql) trong
 SQL Editor (sau `migration_roles.sql`). Script này:
@@ -83,9 +88,9 @@ Supabase từ chối tạo user (nhờ check constraint). `role` bỏ trống s�
 
 ## 3. Điền cấu hình vào trang
 
-Mở [`public/index.html`](public/index.html) **và** [`public/bao-cao-chi-nhanh.html`](public/bao-cao-chi-nhanh.html)
-(nếu dùng cả 2), sửa 2 dòng ở đầu thẻ `<script>` cuối mỗi file — cùng 1 project thì giá trị
-giống nhau ở cả 2 file:
+Mở [`public/index.html`](public/index.html) (và `bao-cao-chi-nhanh.html`, `bao-cao-tay-thanh.html`
+nếu vẫn giữ dùng), sửa 2 dòng ở đầu thẻ `<script>` cuối mỗi file — cùng 1 project thì giá trị
+giống nhau ở mọi file:
 
 ```js
 const SUPABASE_URL = 'https://xxxxx.supabase.co';
@@ -112,9 +117,9 @@ là đơn giản và ổn định nhất — không có vấn đề ổ đĩa/kh
    - **Publish Directory**: `public`
 4. **Create Static Site** → đợi deploy → nhận URL dạng `https://ten-app.onrender.com`, gửi cho cả phòng.
 
-Vì cả 2 file cùng nằm trong `public/`, Render tự phục vụ cả hai — chia sẻ
-`https://ten-app.onrender.com/index.html` cho phòng Tây Thạnh (bản cũ) hoặc
-`https://ten-app.onrender.com/bao-cao-chi-nhanh.html` cho bản nhiều phòng ban, tuỳ nhu cầu.
+Mở thẳng `https://ten-app.onrender.com` là vào bản nhiều phòng ban (`index.html`) luôn, không cần
+gõ thêm gì. Bản Tây Thạnh cũ vẫn xem được riêng ở
+`https://ten-app.onrender.com/bao-cao-tay-thanh.html` nếu cần.
 
 ## Bảo mật (lưu ý)
 
