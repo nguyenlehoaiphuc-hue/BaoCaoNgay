@@ -112,9 +112,39 @@
   .date-field{
     display: inline-flex;
     align-items: baseline;
-    gap: 2px;
+    gap: 7px;
   }
-  .subtitle input[type="date"]{ width: 118px; padding-left: 0; margin-left: -2px; }
+  .date-input-wrap{
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* input ngày gốc của trình duyệt trong suốt HOÀN TOÀN (không chỉ ẩn chữ) và phủ kín lên trên
+     — trên iOS Safari, chỉ ẩn màu chữ (color) không ăn vì chữ ngày là hiển thị native khoá
+     CSS, nên phải ẩn cả control bằng opacity thì mới chắc chắn không lộ định dạng gốc của máy.
+     Chữ dd/mm/yyyy thật sự nhìn thấy là ở .date-display bên dưới; input vẫn nhận chạm/click
+     để mở lịch vì nó nằm trên cùng, chỉ là vô hình. */
+  .subtitle input[type="date"]{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+  }
+  .date-display{
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    font: inherit;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+  }
 
   .view-toggle{
     display: flex;
@@ -366,7 +396,12 @@
     <h1>BÁO CÁO HÀNG NGÀY</h1>
     <div class="subtitle">
       <input type="text" id="roomName" spellcheck="false">
-      <span class="date-field">NGÀY<input type="date" id="reportDate"></span>
+      <span class="date-field">NGÀY
+        <span class="date-input-wrap">
+          <input type="date" id="reportDate">
+          <span class="date-display" id="dateDisplay"></span>
+        </span>
+      </span>
     </div>
 
     <div class="name-setup" id="nameSetup">
@@ -433,6 +468,7 @@ const DEFAULT_ROWS = [
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const dateInput = document.getElementById('reportDate');
+  const dateDisplay = document.getElementById('dateDisplay');
   const roomInput = document.getElementById('roomName');
   const thead = document.getElementById('kpiThead');
   const tbody = document.getElementById('kpiTbody');
@@ -476,6 +512,12 @@ const DEFAULT_ROWS = [
     roomInput.style.width = Math.max(8, roomInput.value.length + 4) + 'ch';
   }
   roomInput.addEventListener('input', resizeRoomInput);
+
+  function updateDateDisplay(){
+    const parts = (dateInput.value || '').split('-'); // yyyy-mm-dd
+    dateDisplay.textContent = parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : '';
+  }
+  dateInput.addEventListener('input', updateDateDisplay);
 
   function todayISO(){
     const d = new Date();
@@ -760,7 +802,7 @@ const DEFAULT_ROWS = [
     if (whoCell) whoCell.textContent = row.who || '';
   }
 
-  dateInput.addEventListener('change', () => loadDate(dateInput.value));
+  dateInput.addEventListener('change', () => { updateDateDisplay(); loadDate(dateInput.value); });
 
   roomInput.addEventListener('focus', () => { if (!currentUser || currentRole === 'leader') roomInput.blur(); });
   roomInput.addEventListener('blur', async () => {
@@ -825,6 +867,7 @@ const DEFAULT_ROWS = [
   // session on load, so it drives both the logged-out overlay and the
   // first loadDate() call once a session is present.
   if (!dateInput.value) dateInput.value = todayISO();
+  updateDateDisplay();
 })();
 </script>
 </body>
