@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Báo cáo hàng ngày</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+  :root{
+    --blue: #4472C4;
+    --blue-dark: #33538c;
+    --row-alt: #E9F0FB;
+    --border: #B9C6DE;
+    --text: #1F2937;
+    --muted: #6B7280;
+    --live: #1a7f37;
+  }
+  *{ box-sizing: border-box; }
+  body{
+    margin: 0;
+    padding: 32px 16px 60px;
+    background: #F3F5F9;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+  }
+  .sheet{
+    max-width: 920px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 14px rgba(30,41,59,.08);
+    padding: 36px 40px 28px;
+  }
+  .status{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .dot{ width: 8px; height: 8px; border-radius: 50%; background: #ccc; display: inline-block; }
+  .dot.on{ background: var(--live); }
+  .whoami{
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--blue-dark);
+    font-weight: 600;
+  }
+  .whoami .logout-link{
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .whoami .logout-link:hover{ text-decoration: underline; color: var(--text); }
+  .role-badge{
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #E9F0FB;
+    color: var(--blue-dark);
+    text-transform: uppercase;
+    letter-spacing: .3px;
+  }
+  .role-badge.leader{ background: #FDECC8; color: #92620A; }
+
+  .pw-change{
+    display: none;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    background: #F5F8FE;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 14px;
+    font-size: 12.5px;
+  }
+  .pw-change.show{ display: flex; }
+  .pw-change input{
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font: inherit;
+    min-width: 170px;
+  }
+  .pw-change button{ padding: 7px 14px; font-size: 12.5px; }
+  .pw-msg{ font-size: 12px; color: var(--muted); width: 100%; text-align: center; }
+  .pw-msg.error{ color: #b42318; }
+  .pw-msg.ok{ color: var(--live); }
+
+  #reportCapture{
+    background: #fff;
+    padding: 6px 2px 2px;
+  }
+  h1{
+    text-align: center;
+    font-size: 30px;
+    letter-spacing: .5px;
+    margin: 0 0 6px;
+    color: var(--blue-dark);
+  }
+  .subtitle{
+    text-align: center;
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  #deptName{ color: inherit; }
+  .date-field{
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+  }
+  .date-input-wrap{
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* input ngày gốc của trình duyệt trong suốt HOÀN TOÀN (không chỉ ẩn chữ) và phủ kín lên trên
+     — trên iOS Safari, chỉ ẩn màu chữ (color) không ăn vì chữ ngày là hiển thị native khoá
+     CSS, nên phải ẩn cả control bằng opacity thì mới chắc chắn không lộ định dạng gốc của máy.
+     Chữ dd/mm/yyyy thật sự nhìn thấy là ở .date-display bên dưới; input vẫn nhận chạm/click
+     để mở lịch vì nó nằm trên cùng, chỉ là vô hình. */
+  .date-input-wrap input[type="date"]{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+  .date-display{
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    font: inherit;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+  }
+
+  .view-toggle{
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 22px;
+  }
+  .toggle-btn{
+    font: inherit;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1.5px solid var(--blue);
+    background: #fff;
+    color: var(--blue-dark);
+    cursor: pointer;
+  }
+  .toggle-btn.active{ background: var(--blue); color: #fff; }
+
+  .table-wrap{
+    overflow-x: auto;
+    margin-top: 14px;
+  }
+  table{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+  }
+  td.col-total{ font-weight: 700; background: #F5F8FE; }
+  th.col-total{ background: var(--blue-dark) !important; }
+  thead th{
+    background: var(--blue);
+    color: #fff;
+    font-weight: 700;
+    text-align: center;
+    padding: 12px 14px;
+    border: 1px solid var(--blue);
+  }
+  th.col-num, td.col-num{ text-align: right; }
+  th.col-note, td.col-note{ width: 15%; }
+  th.col-who, td.col-who{ width: 16%; }
+  td.col-who{ font-size: 12.5px; font-weight: 600; color: #45546b; }
+  tbody td{
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tbody tr:nth-child(even){ background: var(--row-alt); }
+  tbody tr:nth-child(odd){ background: #fff; }
+
+  td[contenteditable="true"]{
+    cursor: text;
+    outline: none;
+    min-height: 1.2em;
+  }
+  td[contenteditable="true"]:hover{ box-shadow: inset 0 0 0 1px var(--blue); }
+  td[contenteditable="true"]:focus{
+    box-shadow: inset 0 0 0 2px var(--blue);
+    background: #fff;
+  }
+  td.flash-mine{ animation: flashMine 900ms ease-out; }
+  td.flash-other{ animation: flashOther 1400ms ease-out; }
+  @keyframes flashMine{ 0%{ background: #DCEEDD; } 100%{ background: inherit; } }
+  @keyframes flashOther{ 0%{ background: #FFF3CD; } 100%{ background: inherit; } }
+
+  .toolbar{
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 26px;
+    flex-wrap: wrap;
+  }
+  button{
+    font: inherit;
+    font-weight: 600;
+    font-size: 13.5px;
+    padding: 9px 18px;
+    border-radius: 7px;
+    border: 1px solid var(--blue);
+    background: var(--blue);
+    color: #fff;
+    cursor: pointer;
+  }
+  button.secondary{ background: #fff; color: var(--blue-dark); }
+  button:hover{ filter: brightness(1.06); }
+
+  .hint{
+    margin-top: 18px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.6;
+  }
+  .hint b{ color: var(--text); }
+
+  /* --- Login overlay --- */
+  .overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(31,41,55,.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .overlay.hidden{ display: none; }
+  .picker{
+    background: #fff;
+    border-radius: 14px;
+    padding: 32px 36px;
+    max-width: 420px;
+    width: 92%;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25);
+    text-align: center;
+  }
+  .picker h2{
+    margin: 0 0 4px;
+    font-size: 19px;
+    color: var(--blue-dark);
+  }
+  .picker p{
+    margin: 0 0 20px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .login-form{
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+  }
+  .login-form label{
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .login-form input{
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    font: inherit;
+  }
+  .login-form input:focus{
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px rgba(68,114,196,.15);
+  }
+  .login-form button{ width: 100%; margin-top: 4px; padding: 11px; }
+  .login-error{
+    color: #b42318;
+    font-size: 12.5px;
+    min-height: 16px;
+    text-align: center;
+  }
+  .name-setup{
+    display: none;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    background: #FFF8E6;
+    border: 1px solid #F2D98A;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 14px;
+    font-size: 12.5px;
+  }
+  .name-setup.show{ display: flex; flex-wrap: wrap; }
+  .name-setup input{
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font: inherit;
+    min-width: 160px;
+  }
+  .name-setup button{ padding: 7px 14px; font-size: 12.5px; }
+
+  @media print{
+    body{ background: #fff; padding: 0; }
+    .sheet{ box-shadow: none; padding: 0; }
+    .toolbar, .hint, .status, .pw-change{ display: none; }
+  }
+
+  @media (max-width: 640px){
+    body{ padding: 14px 8px 40px; }
+    .sheet{
+      padding: 18px 14px 18px;
+      border-radius: 8px;
+    }
+    .status{ flex-wrap: wrap; row-gap: 6px; }
+    .whoami{ margin-left: 0; width: 100%; justify-content: center; flex-wrap: wrap; }
+
+    h1{ font-size: 21px; letter-spacing: .2px; }
+    .subtitle{ font-size: 12.5px; }
+
+    .view-toggle{ margin-top: 16px; }
+    .toggle-btn{ flex: 1; padding: 8px 10px; font-size: 12px; }
+
+    table{ font-size: 12px; }
+    thead th, tbody td{ padding: 8px 8px; }
+    th.col-who, td.col-who{ width: auto; }
+    td.col-who{ font-size: 11px; }
+
+    .toolbar{ gap: 8px; }
+    .toolbar button{ flex: 1 1 auto; min-width: 104px; padding: 10px 10px; font-size: 12.5px; }
+
+    .picker{ padding: 24px 20px; }
+    .name-setup, .pw-change{ font-size: 12px; }
+    .name-setup input, .pw-change input{ min-width: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="overlay" class="overlay hidden">
+  <div class="picker">
+    <h2>Đăng nhập</h2>
+    <p>Dùng tài khoản được cấp cho phòng ban để vào cập nhật báo cáo.</p>
+    <form class="login-form" id="loginForm">
+      <div>
+        <label for="loginEmail">Tên đăng nhập</label>
+        <input type="text" id="loginEmail" autocomplete="username" required>
+      </div>
+      <div>
+        <label for="loginPassword">Mật khẩu</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+      </div>
+      <div class="login-error" id="loginError"></div>
+      <button type="submit" id="loginSubmit">Đăng nhập</button>
+    </form>
+  </div>
+</div>
+
+<div class="sheet">
+  <div class="status">
+    <span class="dot" id="liveDot"></span><span id="liveText">Đang kết nối...</span>
+    <span class="whoami" id="whoami" style="display:none">
+      <span id="whoamiName"></span>
+      <span class="role-badge" id="roleBadge"></span>
+      <span class="logout-link" id="changePwBtn">Đổi mật khẩu</span>
+      <span class="logout-link" id="logoutBtn">Đăng xuất</span>
+    </span>
+  </div>
+
+  <div class="pw-change" id="pwChange">
+    <input type="password" id="newPassword" placeholder="Mật khẩu mới (tối thiểu 6 ký tự)">
+    <input type="password" id="confirmPassword" placeholder="Nhập lại mật khẩu mới">
+    <button id="pwSaveBtn" type="button">Lưu</button>
+    <span class="pw-msg" id="pwMsg"></span>
+  </div>
+
+  <div id="reportCapture">
+    <h1>BÁO CÁO HÀNG NGÀY</h1>
+    <div class="subtitle">
+      <span id="deptName"></span>
+      <span class="date-field">NGÀY
+        <span class="date-input-wrap">
+          <input type="date" id="reportDate">
+          <span class="date-display" id="dateDisplay"></span>
+        </span>
+      </span>
+    </div>
+
+    <div class="name-setup" id="nameSetup">
+      <span>Bạn chưa có tên hiển thị —</span>
+      <input type="text" id="nameSetupInput" placeholder="Nhập tên của bạn...">
+      <button id="nameSetupSave">Lưu</button>
+    </div>
+
+    <div class="view-toggle" id="viewToggle" style="display:none">
+      <button class="toggle-btn active" id="viewSummaryBtn" type="button">Xem tổng hợp</button>
+      <button class="toggle-btn" id="viewDetailBtn" type="button">Xem chi tiết</button>
+    </div>
+
+    <div class="table-wrap">
+      <table id="kpiTable">
+        <thead id="kpiThead">
+          <tr>
+            <th style="width:32%">Chỉ tiêu KPI</th>
+            <th style="width:15%">Đơn vị tính</th>
+            <th class="col-num" style="width:12%">Thực hiện</th>
+            <th class="col-note">Ghi chú</th>
+            <th class="col-who">Người cập nhật</th>
+          </tr>
+        </thead>
+        <tbody id="kpiTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="secondary" id="imageBtn">📷 Xuất ảnh</button>
+    <button class="secondary" id="csvBtn">⬇ Xuất CSV</button>
+    <button class="secondary" id="printBtn">🖨 In / PDF</button>
+  </div>
+
+  <div class="hint">
+    Mọi thay đổi được <b>lưu và đồng bộ tự động</b> tới tất cả mọi người đang mở trang này —
+    không cần bấm lưu. Đổi ngày ở trên để xem/nhập báo cáo của ngày khác.
+  </div>
+</div>
+
+<script>
+// ==== Cấu hình Supabase — điền URL + anon key sau khi tạo project ====
+const SUPABASE_URL = 'https://uidxtpynyefnyfzxepxb.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_zNmbMbsyeOyC_M6mI5xh4A_NSUJIK7F';
+
+// Supabase Auth luôn cần dạng email. Để đăng nhập bằng "tên đăng nhập" thay vì email thật,
+// domain giả này được ghép vào phía sau — khi tạo user trong Supabase Dashboard, đặt email là
+// "tenuser@baocaongay.local" (đúng domain bên dưới) và người dùng chỉ cần gõ "tenuser".
+const LOGIN_DOMAIN = 'baocaongay.local';
+
+const DEFAULT_ROWS = [
+  { name: 'Số lượng KH mới', unit: 'Khách hàng' },
+  { name: 'Delta tăng trưởng dư nợ tín dụng', unit: 'Tỷ đồng' },
+  { name: 'Delta tăng trưởng Nguồn vốn', unit: 'Tỷ đồng' },
+  { name: 'Tăng thu phí', unit: 'Triệu đồng' },
+  { name: 'Lợi nhuận kinh doanh ngoại tệ', unit: 'Triệu đồng' },
+  { name: 'Thu hồi nợ Nhóm 2, NX, XLRR', unit: 'Triệu đồng' },
+  { name: 'Doanh thu Bảo hiểm VBI', unit: 'Triệu đồng' },
+  { name: 'Doanh thu Bảo hiểm MVL', unit: 'Triệu đồng' }
+];
+
+(function(){
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const dateInput = document.getElementById('reportDate');
+  const dateDisplay = document.getElementById('dateDisplay');
+  const deptNameEl = document.getElementById('deptName');
+  const thead = document.getElementById('kpiThead');
+  const tbody = document.getElementById('kpiTbody');
+  const liveDot = document.getElementById('liveDot');
+  const liveText = document.getElementById('liveText');
+  const overlay = document.getElementById('overlay');
+  const loginForm = document.getElementById('loginForm');
+  const loginError = document.getElementById('loginError');
+  const loginSubmit = document.getElementById('loginSubmit');
+  const whoamiEl = document.getElementById('whoami');
+  const whoamiName = document.getElementById('whoamiName');
+  const roleBadge = document.getElementById('roleBadge');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const nameSetup = document.getElementById('nameSetup');
+  const nameSetupInput = document.getElementById('nameSetupInput');
+  const nameSetupSave = document.getElementById('nameSetupSave');
+  const viewToggle = document.getElementById('viewToggle');
+  const viewSummaryBtn = document.getElementById('viewSummaryBtn');
+  const viewDetailBtn = document.getElementById('viewDetailBtn');
+  const changePwBtn = document.getElementById('changePwBtn');
+  const pwChange = document.getElementById('pwChange');
+  const newPasswordInput = document.getElementById('newPassword');
+  const confirmPasswordInput = document.getElementById('confirmPassword');
+  const pwSaveBtn = document.getElementById('pwSaveBtn');
+  const pwMsg = document.getElementById('pwMsg');
+
+  const STAFF_HEAD = '<tr>' +
+    '<th style="width:30%">Chỉ tiêu KPI</th>' +
+    '<th style="width:14%">Đơn vị tính</th>' +
+    '<th class="col-num" style="width:12%">Thực hiện</th>' +
+    '<th class="col-note">Ghi chú</th>' +
+    '<th class="col-who">Người cập nhật</th>' +
+    '</tr>';
+
+  let currentDate = null;
+  let currentChannel = null;
+  let currentUser = null;       // Supabase auth user
+  let currentRole = 'staff';    // 'staff' | 'leader'
+  let currentDepartment = '';   // phòng ban của user đang đăng nhập
+  let userName = '';            // display name shown in "Người cập nhật"
+  let staffList = [];           // [{id, full_name}] — nhân viên CÙNG phòng ban, dùng cho bảng tổng hợp
+  let leaderViewMode = 'summary'; // 'summary' | 'detail' — chỉ áp dụng cho lãnh đạo
+  let lastLeaderRows = [];      // cache để đổi chế độ xem không cần fetch lại
+
+  function updateDateDisplay(){
+    const parts = (dateInput.value || '').split('-'); // yyyy-mm-dd
+    dateDisplay.textContent = parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : '';
+  }
+  dateInput.addEventListener('input', updateDateDisplay);
+
+  function todayISO(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  // ---- Auth ----
+  async function loadProfile(user){
+    const { data: profile } = await sb
+      .from('profiles')
+      .select('full_name, role, department')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    userName = (profile && profile.full_name) || user.email.split('@')[0];
+    currentRole = (profile && profile.role) || 'staff';
+    currentDepartment = (profile && profile.department) || '';
+
+    whoamiName.textContent = '👤 ' + userName;
+    roleBadge.textContent = currentRole === 'leader' ? 'Lãnh đạo' : 'Nhân viên';
+    roleBadge.classList.toggle('leader', currentRole === 'leader');
+    whoamiEl.style.display = 'flex';
+    nameSetup.classList.toggle('show', !(profile && profile.full_name));
+    deptNameEl.textContent = currentDepartment;
+
+    viewToggle.style.display = (currentRole === 'leader') ? 'flex' : 'none';
+
+    if (currentRole === 'leader') {
+      const { data: staff } = await sb
+        .from('profiles')
+        .select('id, full_name')
+        .eq('role', 'staff')
+        .eq('department', currentDepartment)
+        .order('full_name', { ascending: true });
+      staffList = staff || [];
+    }
+  }
+
+  loginForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    loginError.textContent = '';
+    loginSubmit.disabled = true;
+    loginSubmit.textContent = 'Đang đăng nhập...';
+    const username = document.getElementById('loginEmail').value.trim().toLowerCase();
+    const password = document.getElementById('loginPassword').value;
+    const email = username.includes('@') ? username : username + '@' + LOGIN_DOMAIN;
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    loginSubmit.disabled = false;
+    loginSubmit.textContent = 'Đăng nhập';
+    if (error) loginError.textContent = 'Sai tên đăng nhập hoặc mật khẩu.';
+  });
+
+  logoutBtn.addEventListener('click', async () => {
+    await sb.auth.signOut();
+  });
+
+  changePwBtn.addEventListener('click', () => {
+    pwMsg.textContent = '';
+    pwMsg.className = 'pw-msg';
+    newPasswordInput.value = '';
+    confirmPasswordInput.value = '';
+    pwChange.classList.toggle('show');
+  });
+
+  pwSaveBtn.addEventListener('click', async () => {
+    const p1 = newPasswordInput.value;
+    const p2 = confirmPasswordInput.value;
+    pwMsg.className = 'pw-msg';
+    if (p1.length < 6) {
+      pwMsg.textContent = 'Mật khẩu phải từ 6 ký tự trở lên.';
+      pwMsg.classList.add('error');
+      return;
+    }
+    if (p1 !== p2) {
+      pwMsg.textContent = 'Hai mật khẩu chưa khớp nhau.';
+      pwMsg.classList.add('error');
+      return;
+    }
+    pwSaveBtn.disabled = true;
+    const { error } = await sb.auth.updateUser({ password: p1 });
+    pwSaveBtn.disabled = false;
+    if (error) {
+      pwMsg.textContent = 'Không đổi được: ' + error.message;
+      pwMsg.classList.add('error');
+      return;
+    }
+    pwMsg.textContent = 'Đã đổi mật khẩu thành công.';
+    pwMsg.classList.add('ok');
+    newPasswordInput.value = '';
+    confirmPasswordInput.value = '';
+    setTimeout(() => pwChange.classList.remove('show'), 1500);
+  });
+
+  nameSetupSave.addEventListener('click', async () => {
+    const name = nameSetupInput.value.trim();
+    if (!name || !currentUser) return;
+    await sb.from('profiles').upsert({ id: currentUser.id, full_name: name });
+    userName = name;
+    whoamiName.textContent = '👤 ' + userName;
+    nameSetup.classList.remove('show');
+  });
+
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (session && session.user) {
+      currentUser = session.user;
+      overlay.classList.add('hidden');
+      await loadProfile(currentUser);
+      loadDate(currentDate || dateInput.value);
+    } else {
+      currentUser = null;
+      currentRole = 'staff';
+      currentDepartment = '';
+      staffList = [];
+      userName = '';
+      whoamiEl.style.display = 'none';
+      nameSetup.classList.remove('show');
+      pwChange.classList.remove('show');
+      overlay.classList.remove('hidden');
+    }
+  });
+
+  function renderStaffRows(rows){
+    thead.innerHTML = STAFF_HEAD;
+    tbody.innerHTML = '';
+    DEFAULT_ROWS.forEach((def, i) => {
+      const row = rows.find(r => r.row_index === i) || { value: '', note: '', who: '' };
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + def.name + '</td>' +
+        '<td>' + def.unit + '</td>' +
+        '<td class="col-num" contenteditable="true" data-row="' + i + '" data-field="value">' + (row.value || '') + '</td>' +
+        '<td class="col-note" contenteditable="true" data-row="' + i + '" data-field="note">' + (row.note || '') + '</td>' +
+        '<td class="col-who">' + (row.who || '') + '</td>';
+      tbody.appendChild(tr);
+    });
+    bindCellEvents();
+  }
+
+  function sumValues(values){
+    const total = values.reduce((acc, v) => {
+      const n = parseFloat(String(v || '').replace(',', '.'));
+      return acc + (isNaN(n) ? 0 : n);
+    }, 0);
+    return total.toFixed(2);
+  }
+
+  function renderLeaderSummary(allRows){
+    thead.innerHTML =
+      '<tr>' +
+      '<th style="width:38%">Chỉ tiêu KPI</th>' +
+      '<th style="width:20%">Đơn vị tính</th>' +
+      '<th class="col-num">Tổng cộng</th>' +
+      '</tr>';
+
+    tbody.innerHTML = '';
+    DEFAULT_ROWS.forEach((def, i) => {
+      const values = allRows.filter(r => r.row_index === i).map(r => r.value);
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + def.name + '</td>' +
+        '<td>' + def.unit + '</td>' +
+        '<td class="col-num col-total">' + sumValues(values) + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderLeaderRows(allRows){
+    const headCells = ['<th style="width:24%">Chỉ tiêu KPI</th>', '<th style="width:11%">Đơn vị tính</th>']
+      .concat(staffList.map(s => '<th class="col-num">' + (s.full_name || 'Chưa đặt tên') + '</th>'))
+      .concat(['<th class="col-num col-total">Tổng</th>']);
+    thead.innerHTML = '<tr>' + headCells.join('') + '</tr>';
+
+    tbody.innerHTML = '';
+    DEFAULT_ROWS.forEach((def, i) => {
+      const perStaff = staffList.map(s => {
+        const row = allRows.find(r => r.row_index === i && r.user_id === s.id);
+        return row || { value: '', note: '', who: '' };
+      });
+      const cells = ['<td>' + def.name + '</td>', '<td>' + def.unit + '</td>']
+        .concat(perStaff.map(row => {
+          const title = row.note ? (' title="Ghi chú: ' + row.note.replace(/"/g,'&quot;') + '"') : '';
+          return '<td class="col-num"' + title + '>' + (row.value || '') + '</td>';
+        }))
+        .concat(['<td class="col-num col-total">' + sumValues(perStaff.map(r => r.value)) + '</td>']);
+      const tr = document.createElement('tr');
+      tr.innerHTML = cells.join('');
+      tbody.appendChild(tr);
+    });
+  }
+
+  function bindCellEvents(){
+    tbody.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
+      cell.addEventListener('focus', () => {
+        if (!currentUser) cell.blur();
+      });
+      cell.addEventListener('blur', async () => {
+        if (!currentUser) return;
+        const rowIndex = parseInt(cell.getAttribute('data-row'), 10);
+        const field = cell.getAttribute('data-field');
+        const value = cell.textContent.trim();
+        const who = userName + ' · ' + nowStamp();
+
+        cell.classList.add('flash-mine');
+        setTimeout(() => cell.classList.remove('flash-mine'), 900);
+        cell.closest('tr').querySelector('.col-who').textContent = who;
+
+        const payload = {
+          report_date: currentDate,
+          row_index: rowIndex,
+          user_id: currentUser.id,
+          kpi_name: DEFAULT_ROWS[rowIndex].name,
+          unit: DEFAULT_ROWS[rowIndex].unit,
+          who,
+          updated_at: new Date().toISOString()
+        };
+        payload[field] = value;
+        await sb.from('daily_reports').upsert(payload, { onConflict: 'report_date,row_index,user_id' });
+      });
+    });
+  }
+
+  function nowStamp(){
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' ' + pad(d.getDate()) + '/' + pad(d.getMonth()+1);
+  }
+
+  async function fetchAndRenderLeader(date){
+    const { data: rows } = await sb
+      .from('daily_reports')
+      .select('*')
+      .eq('report_date', date);
+    lastLeaderRows = rows || [];
+    renderLeaderView();
+  }
+
+  function renderLeaderView(){
+    if (leaderViewMode === 'detail') {
+      renderLeaderRows(lastLeaderRows);
+    } else {
+      renderLeaderSummary(lastLeaderRows);
+    }
+  }
+
+  viewSummaryBtn.addEventListener('click', () => {
+    leaderViewMode = 'summary';
+    viewSummaryBtn.classList.add('active');
+    viewDetailBtn.classList.remove('active');
+    renderLeaderView();
+  });
+
+  viewDetailBtn.addEventListener('click', () => {
+    leaderViewMode = 'detail';
+    viewDetailBtn.classList.add('active');
+    viewSummaryBtn.classList.remove('active');
+    renderLeaderView();
+  });
+
+  async function loadDate(date){
+    currentDate = date;
+
+    if (currentChannel) {
+      await sb.removeChannel(currentChannel);
+      currentChannel = null;
+    }
+
+    if (currentRole === 'leader') {
+      await fetchAndRenderLeader(date);
+    } else {
+      const { data: rows } = await sb
+        .from('daily_reports')
+        .select('*')
+        .eq('report_date', date)
+        .eq('user_id', currentUser.id);
+      renderStaffRows(rows || []);
+    }
+
+    // Lưu ý: kênh realtime chỉ lọc theo report_date (không lọc theo phòng ban) — Row Level
+    // Security ở phía Supabase mới là nơi thực sự chặn không cho thấy dữ liệu phòng khác,
+    // filter ở đây chỉ để giảm số sự kiện không liên quan tới ngày đang xem.
+    currentChannel = sb
+      .channel('report-' + date)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'daily_reports', filter: 'report_date=eq.' + date
+      }, payload => {
+        if (currentRole === 'leader') {
+          fetchAndRenderLeader(date);
+        } else {
+          const row = payload.new;
+          if (row) applyRemoteRow(row);
+        }
+      })
+      .subscribe(status => {
+        const on = status === 'SUBSCRIBED';
+        liveDot.classList.toggle('on', on);
+        liveText.textContent = on ? 'Đang cập nhật trực tiếp' : 'Đang kết nối...';
+      });
+  }
+
+  function applyRemoteRow(row){
+    ['value', 'note'].forEach(field => {
+      const cell = tbody.querySelector('td[data-row="' + row.row_index + '"][data-field="' + field + '"]');
+      if (!cell) return;
+      if (document.activeElement !== cell && cell.textContent.trim() !== (row[field] || '')) {
+        cell.textContent = row[field] || '';
+        cell.classList.add('flash-other');
+        setTimeout(() => cell.classList.remove('flash-other'), 1400);
+      }
+    });
+    const whoCell = tbody.querySelector('td[data-row="' + row.row_index + '"][data-field="value"]')?.closest('tr')?.querySelector('.col-who');
+    if (whoCell) whoCell.textContent = row.who || '';
+  }
+
+  dateInput.addEventListener('change', () => { updateDateDisplay(); loadDate(dateInput.value); });
+
+  document.getElementById('printBtn').addEventListener('click', () => window.print());
+
+  document.getElementById('imageBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('imageBtn');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Đang chụp...';
+    try {
+      const target = document.getElementById('reportCapture');
+      // Luôn render như trên màn hình desktop rộng (bỏ qua @media mobile), để ảnh xuất ra
+      // không bị vỡ chữ/wrap xấu khi bấm nút từ điện thoại màn hình hẹp.
+      const canvas = await html2canvas(target, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+        windowWidth: 1000,
+        windowHeight: Math.max(target.scrollHeight + 200, 800)
+      });
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'bao-cao-' + (currentDepartment || 'ngay') + '-' + (currentDate || 'export') + '.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+
+  document.getElementById('csvBtn').addEventListener('click', () => {
+    const headCells = thead.querySelectorAll('th');
+    const rows = [Array.prototype.map.call(headCells, th => '"' + th.textContent.replace(/"/g,'""').trim() + '"')];
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const cells = tr.querySelectorAll('td');
+      rows.push(Array.prototype.map.call(cells, td => '"' + td.textContent.replace(/"/g,'""').trim() + '"'));
+    });
+    const csv = '﻿' + rows.map(r => r.join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bao-cao-' + (currentDepartment || 'ngay') + '-' + (currentDate || 'export') + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // --- init ---
+  // sb.auth.onAuthStateChange (above) fires immediately with the current
+  // session on load, so it drives both the logged-out overlay and the
+  // first loadDate() call once a session is present.
+  if (!dateInput.value) dateInput.value = todayISO();
+  updateDateDisplay();
+})();
+</script>
+</body>
+</html>

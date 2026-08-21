@@ -9,6 +9,19 @@ Có 2 vai trò:
 - **Nhân viên** — nhập và chỉ nhìn thấy số liệu của chính mình.
 - **Lãnh đạo** — xem bảng tổng hợp (từng nhân viên + cột Tổng), không nhập được số.
 
+## Có 2 file — dùng cho 1 phòng hay nhiều phòng ban
+
+- [`public/index.html`](public/index.html) — bản gốc cho **1 phòng duy nhất** (PGD Tây Thạnh),
+  có ô "Phòng" gõ tự do.
+- [`public/bao-cao-chi-nhanh.html`](public/bao-cao-chi-nhanh.html) — bản mở rộng cho **nhiều
+  phòng ban cùng lúc** (7 phòng: Phòng DVKH, Phòng Bán Lẻ, Phòng Doanh Nghiệp, Phòng KTTH,
+  PGD Tây Thạnh, PGD Hưng Phát, PGD Phan Đăng Lưu). Mỗi tài khoản gắn cố định với 1 phòng ban;
+  lãnh đạo chỉ xem tổng hợp của đúng phòng ban mình, không thấy phòng khác. File này còn có thêm
+  nút **"Đổi mật khẩu"** để mỗi người tự đặt lại mật khẩu sau khi admin cấp tài khoản ban đầu.
+
+Cả 2 file dùng chung 1 Supabase project — chạy đúng thứ tự file migration bên dưới để nâng cấp
+database hỗ trợ cả 2.
+
 ## 1. Tạo Supabase project
 
 1. Vào [supabase.com](https://supabase.com) → đăng nhập → **New project**.
@@ -49,9 +62,30 @@ Mặc định mọi tài khoản mới đều là **staff** (nhân viên). Sau k
 > làm bước gán role ở trên. **Lưu ý**: migration này xoá sạch dữ liệu test đã nhập trong
 > `daily_reports` vì đổi cấu trúc bảng.
 
+### Muốn dùng bản nhiều phòng ban (`bao-cao-chi-nhanh.html`)?
+
+Chạy tiếp file [`supabase/migration_departments.sql`](supabase/migration_departments.sql) trong
+SQL Editor (sau `migration_roles.sql`). Script này:
+- Thêm cột `department` vào `profiles`, giới hạn đúng 7 tên phòng ban cố định.
+- Gán toàn bộ tài khoản cũ (đang test Tây Thạnh) vào phòng `PGD Tây Thạnh`.
+- Sửa lại RLS: lãnh đạo chỉ xem được nhân viên **cùng phòng ban**, không thấy phòng khác.
+
+Từ giờ khi **Add user**, điền thêm `department` trong User Metadata để tạo tài khoản đã đúng
+phòng ban ngay từ đầu, không cần vào Table Editor sửa tay:
+
+```json
+{"full_name": "Nguyễn Văn A", "role": "staff", "department": "Phòng DVKH"}
+```
+
+`department` phải là đúng 1 trong 7 giá trị: `Phòng DVKH`, `Phòng Bán Lẻ`, `Phòng Doanh Nghiệp`,
+`Phòng KTTH`, `PGD Tây Thạnh`, `PGD Hưng Phát`, `PGD Phan Đăng Lưu` — gõ sai chính tả sẽ bị
+Supabase từ chối tạo user (nhờ check constraint). `role` bỏ trống sẽ mặc định `staff`.
+
 ## 3. Điền cấu hình vào trang
 
-Mở [`public/index.html`](public/index.html), sửa 2 dòng ở đầu thẻ `<script>` cuối file:
+Mở [`public/index.html`](public/index.html) **và** [`public/bao-cao-chi-nhanh.html`](public/bao-cao-chi-nhanh.html)
+(nếu dùng cả 2), sửa 2 dòng ở đầu thẻ `<script>` cuối mỗi file — cùng 1 project thì giá trị
+giống nhau ở cả 2 file:
 
 ```js
 const SUPABASE_URL = 'https://xxxxx.supabase.co';
@@ -78,6 +112,10 @@ là đơn giản và ổn định nhất — không có vấn đề ổ đĩa/kh
    - **Publish Directory**: `public`
 4. **Create Static Site** → đợi deploy → nhận URL dạng `https://ten-app.onrender.com`, gửi cho cả phòng.
 
+Vì cả 2 file cùng nằm trong `public/`, Render tự phục vụ cả hai — chia sẻ
+`https://ten-app.onrender.com/index.html` cho phòng Tây Thạnh (bản cũ) hoặc
+`https://ten-app.onrender.com/bao-cao-chi-nhanh.html` cho bản nhiều phòng ban, tuỳ nhu cầu.
+
 ## Bảo mật (lưu ý)
 
 - Anon key an toàn để đặt trong code phía client — nó không phải bí mật, quyền truy cập được kiểm
@@ -85,3 +123,8 @@ là đơn giản và ổn định nhất — không có vấn đề ổ đĩa/kh
   dữ liệu báo cáo). Không dùng `service_role` key ở đây.
 - Tắt "Allow new users to sign up" (bước 1.6) để không ai lạ tự tạo tài khoản truy cập.
 - Muốn xoá quyền truy cập của ai đó: **Authentication → Users** → xoá tài khoản tương ứng.
+- Nút "Đổi mật khẩu" trong `bao-cao-chi-nhanh.html` dùng thẳng hàm tự đổi mật khẩu của Supabase
+  Auth, không cần mật khẩu cũ — hoạt động vì **Secure password change** đang tắt trong project
+  (Authentication → Sign In/Providers → Email). Nếu sau này bật tuỳ chọn đó lên, người dùng cần
+  đăng nhập lại gần đây mới đổi được mật khẩu, và có thể cần sửa thêm code mới hỗ trợ đúng luồng
+  đó.
