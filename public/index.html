@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Báo cáo hàng ngày</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
   :root{
     --blue: #4472C4;
@@ -57,7 +58,22 @@
     font-size: 12px;
   }
   .whoami .logout-link:hover{ text-decoration: underline; color: var(--text); }
+  .role-badge{
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #E9F0FB;
+    color: var(--blue-dark);
+    text-transform: uppercase;
+    letter-spacing: .3px;
+  }
+  .role-badge.leader{ background: #FDECC8; color: #92620A; }
 
+  #reportCapture{
+    background: #fff;
+    padding: 6px 2px 2px;
+  }
   h1{
     text-align: center;
     font-size: 30px;
@@ -74,7 +90,7 @@
     display: flex;
     justify-content: center;
     align-items: baseline;
-    gap: 6px;
+    gap: 3px;
     flex-wrap: wrap;
   }
   .subtitle input{
@@ -86,32 +102,62 @@
     border-bottom: 1px dashed transparent;
     background: transparent;
     color: inherit;
-    width: 150px;
     padding: 0 2px;
   }
   .subtitle input:hover, .subtitle input:focus{
     border-bottom-color: var(--blue);
     outline: none;
   }
-  .subtitle input[type="date"]{ width: 165px; }
+  .subtitle input#roomName{ width: 15ch; }
+  .date-field{
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+  .subtitle input[type="date"]{ width: 118px; padding-left: 0; margin-left: -2px; }
 
+  .view-toggle{
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 22px;
+  }
+  .toggle-btn{
+    font: inherit;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    border: 1.5px solid var(--blue);
+    background: #fff;
+    color: var(--blue-dark);
+    cursor: pointer;
+  }
+  .toggle-btn.active{ background: var(--blue); color: #fff; }
+
+  .table-wrap{
+    overflow-x: auto;
+    margin-top: 14px;
+  }
   table{
     width: 100%;
     border-collapse: collapse;
-    margin-top: 22px;
     font-size: 14.5px;
   }
+  td.col-total{ font-weight: 700; background: #F5F8FE; }
+  th.col-total{ background: var(--blue-dark) !important; }
   thead th{
     background: var(--blue);
     color: #fff;
     font-weight: 700;
-    text-align: left;
+    text-align: center;
     padding: 12px 14px;
     border: 1px solid var(--blue);
   }
   th.col-num, td.col-num{ text-align: right; }
   th.col-note, td.col-note{ width: 15%; }
-  th.col-who, td.col-who{ width: 16%; font-size: 12px; color: var(--muted); }
+  th.col-who, td.col-who{ width: 16%; }
+  td.col-who{ font-size: 12.5px; font-weight: 600; color: #45546b; }
   tbody td{
     padding: 12px 14px;
     border: 1px solid var(--border);
@@ -282,36 +328,47 @@
     <span class="dot" id="liveDot"></span><span id="liveText">Đang kết nối...</span>
     <span class="whoami" id="whoami" style="display:none">
       <span id="whoamiName"></span>
+      <span class="role-badge" id="roleBadge"></span>
       <span class="logout-link" id="logoutBtn">Đăng xuất</span>
     </span>
   </div>
 
-  <h1>BÁO CÁO HÀNG NGÀY</h1>
-  <div class="subtitle">
-    PHÒNG <input type="text" id="roomName" spellcheck="false">
-    NGÀY <input type="date" id="reportDate">
-  </div>
+  <div id="reportCapture">
+    <h1>BÁO CÁO HÀNG NGÀY</h1>
+    <div class="subtitle">
+      <input type="text" id="roomName" spellcheck="false">
+      <span class="date-field">NGÀY<input type="date" id="reportDate"></span>
+    </div>
 
-  <div class="name-setup" id="nameSetup">
-    <span>Bạn chưa có tên hiển thị —</span>
-    <input type="text" id="nameSetupInput" placeholder="Nhập tên của bạn...">
-    <button id="nameSetupSave">Lưu</button>
-  </div>
+    <div class="name-setup" id="nameSetup">
+      <span>Bạn chưa có tên hiển thị —</span>
+      <input type="text" id="nameSetupInput" placeholder="Nhập tên của bạn...">
+      <button id="nameSetupSave">Lưu</button>
+    </div>
 
-  <table id="kpiTable">
-    <thead>
-      <tr>
-        <th style="width:32%">Chỉ tiêu KPI</th>
-        <th style="width:15%">Đơn vị tính</th>
-        <th class="col-num" style="width:12%">Thực hiện</th>
-        <th class="col-note">Ghi chú</th>
-        <th class="col-who">Người cập nhật</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+    <div class="view-toggle" id="viewToggle" style="display:none">
+      <button class="toggle-btn active" id="viewSummaryBtn" type="button">Xem tổng hợp</button>
+      <button class="toggle-btn" id="viewDetailBtn" type="button">Xem chi tiết</button>
+    </div>
+
+    <div class="table-wrap">
+      <table id="kpiTable">
+        <thead id="kpiThead">
+          <tr>
+            <th style="width:32%">Chỉ tiêu KPI</th>
+            <th style="width:15%">Đơn vị tính</th>
+            <th class="col-num" style="width:12%">Thực hiện</th>
+            <th class="col-note">Ghi chú</th>
+            <th class="col-who">Người cập nhật</th>
+          </tr>
+        </thead>
+        <tbody id="kpiTbody"></tbody>
+      </table>
+    </div>
+  </div>
 
   <div class="toolbar">
+    <button class="secondary" id="imageBtn">📷 Xuất ảnh</button>
     <button class="secondary" id="csvBtn">⬇ Xuất CSV</button>
     <button class="secondary" id="printBtn">🖨 In / PDF</button>
   </div>
@@ -348,7 +405,8 @@ const DEFAULT_ROWS = [
 
   const dateInput = document.getElementById('reportDate');
   const roomInput = document.getElementById('roomName');
-  const tbody = document.querySelector('#kpiTable tbody');
+  const thead = document.getElementById('kpiThead');
+  const tbody = document.getElementById('kpiTbody');
   const liveDot = document.getElementById('liveDot');
   const liveText = document.getElementById('liveText');
   const overlay = document.getElementById('overlay');
@@ -357,15 +415,38 @@ const DEFAULT_ROWS = [
   const loginSubmit = document.getElementById('loginSubmit');
   const whoamiEl = document.getElementById('whoami');
   const whoamiName = document.getElementById('whoamiName');
+  const roleBadge = document.getElementById('roleBadge');
   const logoutBtn = document.getElementById('logoutBtn');
   const nameSetup = document.getElementById('nameSetup');
   const nameSetupInput = document.getElementById('nameSetupInput');
   const nameSetupSave = document.getElementById('nameSetupSave');
+  const viewToggle = document.getElementById('viewToggle');
+  const viewSummaryBtn = document.getElementById('viewSummaryBtn');
+  const viewDetailBtn = document.getElementById('viewDetailBtn');
+
+  const STAFF_HEAD = '<tr>' +
+    '<th style="width:30%">Chỉ tiêu KPI</th>' +
+    '<th style="width:14%">Đơn vị tính</th>' +
+    '<th class="col-num" style="width:12%">Thực hiện</th>' +
+    '<th class="col-note">Ghi chú</th>' +
+    '<th class="col-who">Người cập nhật</th>' +
+    '</tr>';
 
   let currentDate = null;
   let currentChannel = null;
   let currentUser = null;   // Supabase auth user
+  let currentRole = 'staff'; // 'staff' | 'leader'
   let userName = '';        // display name shown in "Người cập nhật"
+  let staffList = [];       // [{id, full_name}] — dùng cho bảng tổng hợp của lãnh đạo
+  let leaderViewMode = 'summary'; // 'summary' | 'detail' — chỉ áp dụng cho lãnh đạo
+  let lastLeaderRows = [];  // cache để đổi chế độ xem không cần fetch lại
+
+  function resizeRoomInput(){
+    // +4 vì chữ hoa đậm (uppercase, bold) rộng hơn đáng kể so với đơn vị "ch" mặc định,
+    // thiếu buffer sẽ làm mất/cắt chữ cuối trong ô.
+    roomInput.style.width = Math.max(8, roomInput.value.length + 4) + 'ch';
+  }
+  roomInput.addEventListener('input', resizeRoomInput);
 
   function todayISO(){
     const d = new Date();
@@ -376,14 +457,30 @@ const DEFAULT_ROWS = [
   async function loadProfile(user){
     const { data: profile } = await sb
       .from('profiles')
-      .select('full_name')
+      .select('full_name, role')
       .eq('id', user.id)
       .maybeSingle();
 
     userName = (profile && profile.full_name) || user.email.split('@')[0];
+    currentRole = (profile && profile.role) || 'staff';
+
     whoamiName.textContent = '👤 ' + userName;
+    roleBadge.textContent = currentRole === 'leader' ? 'Lãnh đạo' : 'Nhân viên';
+    roleBadge.classList.toggle('leader', currentRole === 'leader');
     whoamiEl.style.display = 'flex';
     nameSetup.classList.toggle('show', !(profile && profile.full_name));
+
+    roomInput.readOnly = (currentRole === 'leader');
+    viewToggle.style.display = (currentRole === 'leader') ? 'flex' : 'none';
+
+    if (currentRole === 'leader' && staffList.length === 0) {
+      const { data: staff } = await sb
+        .from('profiles')
+        .select('id, full_name')
+        .eq('role', 'staff')
+        .order('full_name', { ascending: true });
+      staffList = staff || [];
+    }
   }
 
   loginForm.addEventListener('submit', async e => {
@@ -413,14 +510,16 @@ const DEFAULT_ROWS = [
     nameSetup.classList.remove('show');
   });
 
-  sb.auth.onAuthStateChange((event, session) => {
+  sb.auth.onAuthStateChange(async (event, session) => {
     if (session && session.user) {
       currentUser = session.user;
       overlay.classList.add('hidden');
-      loadProfile(currentUser);
+      await loadProfile(currentUser);
       loadDate(currentDate || dateInput.value);
     } else {
       currentUser = null;
+      currentRole = 'staff';
+      staffList = [];
       userName = '';
       whoamiEl.style.display = 'none';
       nameSetup.classList.remove('show');
@@ -428,7 +527,8 @@ const DEFAULT_ROWS = [
     }
   });
 
-  function renderRows(rows){
+  function renderStaffRows(rows){
+    thead.innerHTML = STAFF_HEAD;
     tbody.innerHTML = '';
     DEFAULT_ROWS.forEach((def, i) => {
       const row = rows.find(r => r.row_index === i) || { value: '', note: '', who: '' };
@@ -442,6 +542,58 @@ const DEFAULT_ROWS = [
       tbody.appendChild(tr);
     });
     bindCellEvents();
+  }
+
+  function sumValues(values){
+    const total = values.reduce((acc, v) => {
+      const n = parseFloat(String(v || '').replace(',', '.'));
+      return acc + (isNaN(n) ? 0 : n);
+    }, 0);
+    return total.toFixed(2);
+  }
+
+  function renderLeaderSummary(allRows){
+    thead.innerHTML =
+      '<tr>' +
+      '<th style="width:38%">Chỉ tiêu KPI</th>' +
+      '<th style="width:20%">Đơn vị tính</th>' +
+      '<th class="col-num">Tổng cộng</th>' +
+      '</tr>';
+
+    tbody.innerHTML = '';
+    DEFAULT_ROWS.forEach((def, i) => {
+      const values = allRows.filter(r => r.row_index === i).map(r => r.value);
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + def.name + '</td>' +
+        '<td>' + def.unit + '</td>' +
+        '<td class="col-num col-total">' + sumValues(values) + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderLeaderRows(allRows){
+    const headCells = ['<th style="width:24%">Chỉ tiêu KPI</th>', '<th style="width:11%">Đơn vị tính</th>']
+      .concat(staffList.map(s => '<th class="col-num">' + (s.full_name || 'Chưa đặt tên') + '</th>'))
+      .concat(['<th class="col-num col-total">Tổng</th>']);
+    thead.innerHTML = '<tr>' + headCells.join('') + '</tr>';
+
+    tbody.innerHTML = '';
+    DEFAULT_ROWS.forEach((def, i) => {
+      const perStaff = staffList.map(s => {
+        const row = allRows.find(r => r.row_index === i && r.user_id === s.id);
+        return row || { value: '', note: '', who: '' };
+      });
+      const cells = ['<td>' + def.name + '</td>', '<td>' + def.unit + '</td>']
+        .concat(perStaff.map(row => {
+          const title = row.note ? (' title="Ghi chú: ' + row.note.replace(/"/g,'&quot;') + '"') : '';
+          return '<td class="col-num"' + title + '>' + (row.value || '') + '</td>';
+        }))
+        .concat(['<td class="col-num col-total">' + sumValues(perStaff.map(r => r.value)) + '</td>']);
+      const tr = document.createElement('tr');
+      tr.innerHTML = cells.join('');
+      tbody.appendChild(tr);
+    });
   }
 
   function bindCellEvents(){
@@ -463,13 +615,14 @@ const DEFAULT_ROWS = [
         const payload = {
           report_date: currentDate,
           row_index: rowIndex,
+          user_id: currentUser.id,
           kpi_name: DEFAULT_ROWS[rowIndex].name,
           unit: DEFAULT_ROWS[rowIndex].unit,
           who,
           updated_at: new Date().toISOString()
         };
         payload[field] = value;
-        await sb.from('daily_reports').upsert(payload, { onConflict: 'report_date,row_index' });
+        await sb.from('daily_reports').upsert(payload, { onConflict: 'report_date,row_index,user_id' });
       });
     });
   }
@@ -480,6 +633,37 @@ const DEFAULT_ROWS = [
     return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' ' + pad(d.getDate()) + '/' + pad(d.getMonth()+1);
   }
 
+  async function fetchAndRenderLeader(date){
+    const { data: rows } = await sb
+      .from('daily_reports')
+      .select('*')
+      .eq('report_date', date);
+    lastLeaderRows = rows || [];
+    renderLeaderView();
+  }
+
+  function renderLeaderView(){
+    if (leaderViewMode === 'detail') {
+      renderLeaderRows(lastLeaderRows);
+    } else {
+      renderLeaderSummary(lastLeaderRows);
+    }
+  }
+
+  viewSummaryBtn.addEventListener('click', () => {
+    leaderViewMode = 'summary';
+    viewSummaryBtn.classList.add('active');
+    viewDetailBtn.classList.remove('active');
+    renderLeaderView();
+  });
+
+  viewDetailBtn.addEventListener('click', () => {
+    leaderViewMode = 'detail';
+    viewDetailBtn.classList.add('active');
+    viewSummaryBtn.classList.remove('active');
+    renderLeaderView();
+  });
+
   async function loadDate(date){
     currentDate = date;
 
@@ -488,12 +672,16 @@ const DEFAULT_ROWS = [
       currentChannel = null;
     }
 
-    const { data: rows } = await sb
-      .from('daily_reports')
-      .select('*')
-      .eq('report_date', date);
-
-    renderRows(rows || []);
+    if (currentRole === 'leader') {
+      await fetchAndRenderLeader(date);
+    } else {
+      const { data: rows } = await sb
+        .from('daily_reports')
+        .select('*')
+        .eq('report_date', date)
+        .eq('user_id', currentUser.id);
+      renderStaffRows(rows || []);
+    }
 
     const { data: meta } = await sb
       .from('report_meta')
@@ -501,16 +689,20 @@ const DEFAULT_ROWS = [
       .eq('report_date', date)
       .maybeSingle();
 
-    roomInput.value = (meta && meta.room) || 'TÂY THẠNH';
+    roomInput.value = (meta && meta.room) || 'PGD TÂY THẠNH';
+    resizeRoomInput();
 
     currentChannel = sb
       .channel('report-' + date)
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'daily_reports', filter: 'report_date=eq.' + date
       }, payload => {
-        const row = payload.new;
-        if (!row) return;
-        applyRemoteRow(row);
+        if (currentRole === 'leader') {
+          fetchAndRenderLeader(date);
+        } else {
+          const row = payload.new;
+          if (row) applyRemoteRow(row);
+        }
       })
       .on('postgres_changes', {
         event: '*', schema: 'public', table: 'report_meta', filter: 'report_date=eq.' + date
@@ -541,9 +733,9 @@ const DEFAULT_ROWS = [
 
   dateInput.addEventListener('change', () => loadDate(dateInput.value));
 
-  roomInput.addEventListener('focus', () => { if (!currentUser) roomInput.blur(); });
+  roomInput.addEventListener('focus', () => { if (!currentUser || currentRole === 'leader') roomInput.blur(); });
   roomInput.addEventListener('blur', async () => {
-    if (!currentUser) return;
+    if (!currentUser || currentRole === 'leader') return;
     await sb.from('report_meta').upsert(
       { report_date: currentDate, room: roomInput.value },
       { onConflict: 'report_date' }
@@ -552,8 +744,35 @@ const DEFAULT_ROWS = [
 
   document.getElementById('printBtn').addEventListener('click', () => window.print());
 
+  document.getElementById('imageBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('imageBtn');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Đang chụp...';
+    try {
+      const target = document.getElementById('reportCapture');
+      const canvas = await html2canvas(target, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true
+      });
+      canvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'bao-cao-ngay-' + (currentDate || 'export') + '.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+
   document.getElementById('csvBtn').addEventListener('click', () => {
-    const rows = [['Chỉ tiêu KPI','Đơn vị tính','Thực hiện','Ghi chú','Người cập nhật']];
+    const headCells = thead.querySelectorAll('th');
+    const rows = [Array.prototype.map.call(headCells, th => '"' + th.textContent.replace(/"/g,'""').trim() + '"')];
     tbody.querySelectorAll('tr').forEach(tr => {
       const cells = tr.querySelectorAll('td');
       rows.push(Array.prototype.map.call(cells, td => '"' + td.textContent.replace(/"/g,'""').trim() + '"'));

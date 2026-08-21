@@ -5,6 +5,10 @@ Supabase (Postgres) và đồng bộ realtime tới mọi người đang mở tr
 Đăng nhập bằng tài khoản Supabase Auth; tên hiển thị góc trên bên phải lấy tự động từ hồ sơ
 của tài khoản đang đăng nhập.
 
+Có 2 vai trò:
+- **Nhân viên** — nhập và chỉ nhìn thấy số liệu của chính mình.
+- **Lãnh đạo** — xem bảng tổng hợp (từng nhân viên + cột Tổng), không nhập được số.
+
 ## 1. Tạo Supabase project
 
 1. Vào [supabase.com](https://supabase.com) → đăng nhập → **New project**.
@@ -35,6 +39,15 @@ bằng "tên đăng nhập". Người dùng chỉ gõ tên, không cần biết 
 
 Khi đăng nhập, người dùng chỉ cần gõ **`anha`** (không cần `@baocaongay.local`) và mật khẩu —
 trang tự ghép domain phía sau trước khi gửi lên Supabase.
+
+Mặc định mọi tài khoản mới đều là **staff** (nhân viên). Sau khi tạo xong cả 6 tài khoản:
+1. **Table Editor** → bảng `profiles`
+2. Tìm đúng 2 tài khoản lãnh đạo → sửa cột **role** từ `staff` thành `leader`
+
+> Đã có project chạy `schema.sql` bản cũ (không có role/user_id) từ trước? Chạy file
+> [`supabase/migration_roles.sql`](supabase/migration_roles.sql) trong SQL Editor trước, rồi mới
+> làm bước gán role ở trên. **Lưu ý**: migration này xoá sạch dữ liệu test đã nhập trong
+> `daily_reports` vì đổi cấu trúc bảng.
 
 ## 3. Điền cấu hình vào trang
 
