@@ -300,6 +300,35 @@
     .sheet{ box-shadow: none; padding: 0; }
     .toolbar, .hint, .status{ display: none; }
   }
+
+  @media (max-width: 640px){
+    body{ padding: 14px 8px 40px; }
+    .sheet{
+      padding: 18px 14px 18px;
+      border-radius: 8px;
+    }
+    .status{ flex-wrap: wrap; row-gap: 6px; }
+    .whoami{ margin-left: 0; width: 100%; justify-content: center; }
+
+    h1{ font-size: 21px; letter-spacing: .2px; }
+    .subtitle{ font-size: 12.5px; }
+    .subtitle input#roomName{ width: 13ch; }
+
+    .view-toggle{ margin-top: 16px; }
+    .toggle-btn{ flex: 1; padding: 8px 10px; font-size: 12px; }
+
+    table{ font-size: 12px; }
+    thead th, tbody td{ padding: 8px 8px; }
+    th.col-who, td.col-who{ width: auto; }
+    td.col-who{ font-size: 11px; }
+
+    .toolbar{ gap: 8px; }
+    .toolbar button{ flex: 1 1 auto; min-width: 104px; padding: 10px 10px; font-size: 12.5px; }
+
+    .picker{ padding: 24px 20px; }
+    .name-setup{ font-size: 12px; }
+    .name-setup input{ min-width: 120px; }
+  }
 </style>
 </head>
 <body>
