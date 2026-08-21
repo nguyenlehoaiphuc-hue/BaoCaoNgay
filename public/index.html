@@ -780,10 +780,14 @@ const DEFAULT_ROWS = [
     btn.textContent = 'Đang chụp...';
     try {
       const target = document.getElementById('reportCapture');
+      // Luôn render như trên màn hình desktop rộng (bỏ qua @media mobile), để ảnh xuất ra
+      // không bị vỡ chữ/wrap xấu khi bấm nút từ điện thoại màn hình hẹp.
       const canvas = await html2canvas(target, {
         backgroundColor: '#ffffff',
         scale: 2,
-        useCORS: true
+        useCORS: true,
+        windowWidth: 1000,
+        windowHeight: Math.max(target.scrollHeight + 200, 800)
       });
       canvas.toBlob(blob => {
         const url = URL.createObjectURL(blob);
