@@ -134,9 +134,11 @@
     margin: 0;
     padding: 0;
   }
+  .date-input-wrap{ cursor: pointer; }
   .date-display{
     display: flex;
     align-items: center;
+    gap: 5px;
     padding: 0 4px;
     font: inherit;
     font-weight: 700;
@@ -144,7 +146,13 @@
     letter-spacing: normal;
     text-transform: none;
     white-space: nowrap;
+    border-bottom: 1px dashed var(--border);
   }
+  .date-display::after{
+    content: '📅';
+    font-size: 13px;
+  }
+  .date-input-wrap:hover .date-display{ border-bottom-color: var(--blue); }
 
   .view-toggle{
     display: flex;
@@ -188,6 +196,15 @@
   th.col-note, td.col-note{ width: 15%; }
   th.col-who, td.col-who{ width: 16%; }
   td.col-who{ font-size: 12.5px; font-weight: 600; color: #45546b; }
+  .cell-note{
+    font-size: 10.5px;
+    font-weight: 400;
+    color: var(--muted);
+    text-align: left;
+    white-space: normal;
+    margin-top: 3px;
+    line-height: 1.3;
+  }
   tbody td{
     padding: 12px 14px;
     border: 1px solid var(--border);
@@ -351,6 +368,7 @@
     thead th, tbody td{ padding: 8px 8px; }
     th.col-who, td.col-who{ width: auto; }
     td.col-who{ font-size: 11px; }
+    .cell-note{ font-size: 9.5px; }
 
     .toolbar{ gap: 8px; }
     .toolbar button{ flex: 1 1 auto; min-width: 104px; padding: 10px 10px; font-size: 12.5px; }
@@ -598,6 +616,12 @@ const DEFAULT_ROWS = [
     }
   });
 
+  function escapeHtml(str){
+    return String(str || '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
   function renderStaffRows(rows){
     thead.innerHTML = STAFF_HEAD;
     tbody.innerHTML = '';
@@ -607,9 +631,9 @@ const DEFAULT_ROWS = [
       tr.innerHTML =
         '<td>' + def.name + '</td>' +
         '<td>' + def.unit + '</td>' +
-        '<td class="col-num" contenteditable="true" data-row="' + i + '" data-field="value">' + (row.value || '') + '</td>' +
-        '<td class="col-note" contenteditable="true" data-row="' + i + '" data-field="note">' + (row.note || '') + '</td>' +
-        '<td class="col-who">' + (row.who || '') + '</td>';
+        '<td class="col-num" contenteditable="true" data-row="' + i + '" data-field="value">' + escapeHtml(row.value) + '</td>' +
+        '<td class="col-note" contenteditable="true" data-row="' + i + '" data-field="note">' + escapeHtml(row.note) + '</td>' +
+        '<td class="col-who">' + escapeHtml(row.who) + '</td>';
       tbody.appendChild(tr);
     });
     bindCellEvents();
@@ -626,26 +650,37 @@ const DEFAULT_ROWS = [
   function renderLeaderSummary(allRows){
     thead.innerHTML =
       '<tr>' +
-      '<th style="width:38%">Chỉ tiêu KPI</th>' +
-      '<th style="width:20%">Đơn vị tính</th>' +
-      '<th class="col-num">Tổng cộng</th>' +
+      '<th style="width:28%">Chỉ tiêu KPI</th>' +
+      '<th style="width:13%">Đơn vị tính</th>' +
+      '<th class="col-num" style="width:14%">Tổng cộng</th>' +
+      '<th class="col-note">Ghi chú</th>' +
       '</tr>';
 
     tbody.innerHTML = '';
     DEFAULT_ROWS.forEach((def, i) => {
-      const values = allRows.filter(r => r.row_index === i).map(r => r.value);
+      const rowsForKpi = allRows.filter(r => r.row_index === i);
+      const values = rowsForKpi.map(r => r.value);
+      const notesHtml = rowsForKpi
+        .filter(r => r.note && r.note.trim())
+        .map(r => {
+          const staff = staffList.find(s => s.id === r.user_id);
+          const name = staff ? staff.full_name : '';
+          return '<div class="cell-note">' + (name ? '<b>' + escapeHtml(name) + ':</b> ' : '') + escapeHtml(r.note) + '</div>';
+        })
+        .join('');
       const tr = document.createElement('tr');
       tr.innerHTML =
         '<td>' + def.name + '</td>' +
         '<td>' + def.unit + '</td>' +
-        '<td class="col-num col-total">' + sumValues(values) + '</td>';
+        '<td class="col-num col-total">' + sumValues(values) + '</td>' +
+        '<td class="col-note">' + notesHtml + '</td>';
       tbody.appendChild(tr);
     });
   }
 
   function renderLeaderRows(allRows){
-    const headCells = ['<th style="width:24%">Chỉ tiêu KPI</th>', '<th style="width:11%">Đơn vị tính</th>']
-      .concat(staffList.map(s => '<th class="col-num">' + (s.full_name || 'Chưa đặt tên') + '</th>'))
+    const headCells = ['<th style="width:20%">Chỉ tiêu KPI</th>', '<th style="width:9%">Đơn vị tính</th>']
+      .concat(staffList.map(s => '<th class="col-num">' + escapeHtml(s.full_name || 'Chưa đặt tên') + '</th>'))
       .concat(['<th class="col-num col-total">Tổng</th>']);
     thead.innerHTML = '<tr>' + headCells.join('') + '</tr>';
 
@@ -657,8 +692,8 @@ const DEFAULT_ROWS = [
       });
       const cells = ['<td>' + def.name + '</td>', '<td>' + def.unit + '</td>']
         .concat(perStaff.map(row => {
-          const title = row.note ? (' title="Ghi chú: ' + row.note.replace(/"/g,'&quot;') + '"') : '';
-          return '<td class="col-num"' + title + '>' + (row.value || '') + '</td>';
+          const noteHtml = row.note ? '<div class="cell-note">' + escapeHtml(row.note) + '</div>' : '';
+          return '<td class="col-num">' + escapeHtml(row.value) + noteHtml + '</td>';
         }))
         .concat(['<td class="col-num col-total">' + sumValues(perStaff.map(r => r.value)) + '</td>']);
       const tr = document.createElement('tr');

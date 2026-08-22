@@ -147,9 +147,11 @@
     border: none;
     background: transparent;
   }
+  .date-input-wrap{ cursor: pointer; }
   .date-display{
     display: flex;
     align-items: center;
+    gap: 5px;
     padding: 0 4px;
     font: inherit;
     font-weight: 700;
@@ -157,7 +159,13 @@
     letter-spacing: normal;
     text-transform: none;
     white-space: nowrap;
+    border-bottom: 1px dashed var(--border);
   }
+  .date-display::after{
+    content: '📅';
+    font-size: 13px;
+  }
+  .date-input-wrap:hover .date-display{ border-bottom-color: var(--blue); }
 
   .view-toggle{
     display: flex;
@@ -177,6 +185,53 @@
     cursor: pointer;
   }
   .toggle-btn.active{ background: var(--blue); color: #fff; }
+
+  .period-toggle{
+    display: none;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .toggle-btn.small{ padding: 5px 12px; font-size: 11.5px; }
+
+  .dashboard-grid{
+    display: none;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 14px;
+  }
+  .chart-card{
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px 4px;
+    background: #fff;
+  }
+  .chart-title{
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .chart-unit{ font-weight: 400; color: var(--muted); font-size: 11px; }
+  .chart-host{ position: relative; }
+  .chart-svg{ width: 100%; height: auto; display: block; }
+  .chart-tooltip{
+    position: absolute;
+    top: 4px;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 7px;
+    border-radius: 6px;
+    pointer-events: none;
+    white-space: nowrap;
+    line-height: 1.35;
+    z-index: 5;
+  }
+  .chart-tooltip strong{ font-size: 12px; }
+  .chart-tooltip span{ opacity: .85; }
 
   .table-wrap{
     overflow-x: auto;
@@ -201,6 +256,15 @@
   th.col-note, td.col-note{ width: 15%; }
   th.col-who, td.col-who{ width: 16%; }
   td.col-who{ font-size: 12.5px; font-weight: 600; color: #45546b; }
+  .cell-note{
+    font-size: 10.5px;
+    font-weight: 400;
+    color: var(--muted);
+    text-align: left;
+    white-space: normal;
+    margin-top: 3px;
+    line-height: 1.3;
+  }
   tbody td{
     padding: 12px 14px;
     border: 1px solid var(--border);
@@ -218,6 +282,22 @@
   td[contenteditable="true"]:focus{
     box-shadow: inset 0 0 0 2px var(--blue);
     background: #fff;
+  }
+  .editable-value, .editable-note{
+    cursor: text;
+    outline: none;
+    border-radius: 4px;
+    padding: 1px 2px;
+  }
+  .editable-value:hover, .editable-note:hover{ box-shadow: inset 0 0 0 1px var(--blue); }
+  .editable-value:focus, .editable-note:focus{
+    box-shadow: inset 0 0 0 2px var(--blue);
+    background: #fff;
+  }
+  .editable-note:empty::before{
+    content: 'ghi chú...';
+    color: #b7c0cc;
+    font-style: italic;
   }
   td.flash-mine{ animation: flashMine 900ms ease-out; }
   td.flash-other{ animation: flashOther 1400ms ease-out; }
@@ -363,6 +443,7 @@
     thead th, tbody td{ padding: 8px 8px; }
     th.col-who, td.col-who{ width: auto; }
     td.col-who{ font-size: 11px; }
+    .cell-note{ font-size: 9.5px; }
 
     .toolbar{ gap: 8px; }
     .toolbar button{ flex: 1 1 auto; min-width: 104px; padding: 10px 10px; font-size: 12.5px; }
@@ -370,6 +451,8 @@
     .picker{ padding: 24px 20px; }
     .name-setup, .pw-change{ font-size: 12px; }
     .name-setup input, .pw-change input{ min-width: 120px; }
+
+    .dashboard-grid{ grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -433,9 +516,16 @@
     <div class="view-toggle" id="viewToggle" style="display:none">
       <button class="toggle-btn active" id="viewSummaryBtn" type="button">Xem tổng hợp</button>
       <button class="toggle-btn" id="viewDetailBtn" type="button">Xem chi tiết</button>
+      <button class="toggle-btn" id="viewDashboardBtn" type="button">📊 Dashboard</button>
     </div>
 
-    <div class="table-wrap">
+    <div class="period-toggle" id="periodToggle" style="display:none">
+      <button class="toggle-btn small active" data-period="week" type="button">Tuần</button>
+      <button class="toggle-btn small" data-period="month" type="button">Tháng</button>
+      <button class="toggle-btn small" data-period="year" type="button">Năm</button>
+    </div>
+
+    <div class="table-wrap" id="tableWrap">
       <table id="kpiTable">
         <thead id="kpiThead">
           <tr>
@@ -449,6 +539,8 @@
         <tbody id="kpiTbody"></tbody>
       </table>
     </div>
+
+    <div class="dashboard-grid" id="dashboardGrid"></div>
   </div>
 
   <div class="toolbar">
@@ -508,6 +600,10 @@ const DEFAULT_ROWS = [
   const viewToggle = document.getElementById('viewToggle');
   const viewSummaryBtn = document.getElementById('viewSummaryBtn');
   const viewDetailBtn = document.getElementById('viewDetailBtn');
+  const viewDashboardBtn = document.getElementById('viewDashboardBtn');
+  const periodToggle = document.getElementById('periodToggle');
+  const tableWrap = document.getElementById('tableWrap');
+  const dashboardGrid = document.getElementById('dashboardGrid');
   const changePwBtn = document.getElementById('changePwBtn');
   const pwChange = document.getElementById('pwChange');
   const newPasswordInput = document.getElementById('newPassword');
@@ -530,8 +626,11 @@ const DEFAULT_ROWS = [
   let currentDepartment = '';   // phòng ban của user đang đăng nhập
   let userName = '';            // display name shown in "Người cập nhật"
   let staffList = [];           // [{id, full_name}] — nhân viên CÙNG phòng ban, dùng cho bảng tổng hợp
-  let leaderViewMode = 'summary'; // 'summary' | 'detail' — chỉ áp dụng cho lãnh đạo
+  let leaderViewMode = 'summary'; // 'summary' | 'detail' | 'dashboard' — chỉ áp dụng cho lãnh đạo
   let lastLeaderRows = [];      // cache để đổi chế độ xem không cần fetch lại
+  let summaryPeriod = 'week';   // 'week' | 'month' | 'year' — chỉ áp dụng ở chế độ Dashboard
+
+  const PERIOD_LABEL = { week: 'tuần', month: 'tháng', year: 'năm' };
 
   function updateDateDisplay(){
     const parts = (dateInput.value || '').split('-'); // yyyy-mm-dd
@@ -564,6 +663,12 @@ const DEFAULT_ROWS = [
     deptNameEl.textContent = currentDepartment;
 
     viewToggle.style.display = (currentRole === 'leader') ? 'flex' : 'none';
+    if (currentRole === 'leader') {
+      leaderViewMode = 'summary';
+      [viewSummaryBtn, viewDetailBtn, viewDashboardBtn].forEach(btn => btn.classList.remove('active'));
+      viewSummaryBtn.classList.add('active');
+      setLeaderPanels('summary');
+    }
 
     if (currentRole === 'leader') {
       const { data: staff } = await sb
@@ -652,12 +757,20 @@ const DEFAULT_ROWS = [
       currentDepartment = '';
       staffList = [];
       userName = '';
+      leaderViewMode = 'summary';
+      summaryPeriod = 'week';
       whoamiEl.style.display = 'none';
       nameSetup.classList.remove('show');
       pwChange.classList.remove('show');
       overlay.classList.remove('hidden');
     }
   });
+
+  function escapeHtml(str){
+    return String(str || '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
 
   function renderStaffRows(rows){
     thead.innerHTML = STAFF_HEAD;
@@ -668,9 +781,9 @@ const DEFAULT_ROWS = [
       tr.innerHTML =
         '<td>' + def.name + '</td>' +
         '<td>' + def.unit + '</td>' +
-        '<td class="col-num" contenteditable="true" data-row="' + i + '" data-field="value">' + (row.value || '') + '</td>' +
-        '<td class="col-note" contenteditable="true" data-row="' + i + '" data-field="note">' + (row.note || '') + '</td>' +
-        '<td class="col-who">' + (row.who || '') + '</td>';
+        '<td class="col-num" contenteditable="true" data-row="' + i + '" data-field="value">' + escapeHtml(row.value) + '</td>' +
+        '<td class="col-note" contenteditable="true" data-row="' + i + '" data-field="note">' + escapeHtml(row.note) + '</td>' +
+        '<td class="col-who">' + escapeHtml(row.who) + '</td>';
       tbody.appendChild(tr);
     });
     bindCellEvents();
@@ -687,26 +800,37 @@ const DEFAULT_ROWS = [
   function renderLeaderSummary(allRows){
     thead.innerHTML =
       '<tr>' +
-      '<th style="width:38%">Chỉ tiêu KPI</th>' +
-      '<th style="width:20%">Đơn vị tính</th>' +
-      '<th class="col-num">Tổng cộng</th>' +
+      '<th style="width:28%">Chỉ tiêu KPI</th>' +
+      '<th style="width:13%">Đơn vị tính</th>' +
+      '<th class="col-num" style="width:14%">Tổng cộng</th>' +
+      '<th class="col-note">Ghi chú</th>' +
       '</tr>';
 
     tbody.innerHTML = '';
     DEFAULT_ROWS.forEach((def, i) => {
-      const values = allRows.filter(r => r.row_index === i).map(r => r.value);
+      const rowsForKpi = allRows.filter(r => r.row_index === i);
+      const values = rowsForKpi.map(r => r.value);
+      const notesHtml = rowsForKpi
+        .filter(r => r.note && r.note.trim())
+        .map(r => {
+          const staff = staffList.find(s => s.id === r.user_id);
+          const name = staff ? staff.full_name : '';
+          return '<div class="cell-note">' + (name ? '<b>' + escapeHtml(name) + ':</b> ' : '') + escapeHtml(r.note) + '</div>';
+        })
+        .join('');
       const tr = document.createElement('tr');
       tr.innerHTML =
         '<td>' + def.name + '</td>' +
         '<td>' + def.unit + '</td>' +
-        '<td class="col-num col-total">' + sumValues(values) + '</td>';
+        '<td class="col-num col-total">' + sumValues(values) + '</td>' +
+        '<td class="col-note">' + notesHtml + '</td>';
       tbody.appendChild(tr);
     });
   }
 
   function renderLeaderRows(allRows){
-    const headCells = ['<th style="width:24%">Chỉ tiêu KPI</th>', '<th style="width:11%">Đơn vị tính</th>']
-      .concat(staffList.map(s => '<th class="col-num">' + (s.full_name || 'Chưa đặt tên') + '</th>'))
+    const headCells = ['<th style="width:20%">Chỉ tiêu KPI</th>', '<th style="width:9%">Đơn vị tính</th>']
+      .concat(staffList.map(s => '<th class="col-num">' + escapeHtml(s.full_name || 'Chưa đặt tên') + '</th>'))
       .concat(['<th class="col-num col-total">Tổng</th>']);
     thead.innerHTML = '<tr>' + headCells.join('') + '</tr>';
 
@@ -714,22 +838,25 @@ const DEFAULT_ROWS = [
     DEFAULT_ROWS.forEach((def, i) => {
       const perStaff = staffList.map(s => {
         const row = allRows.find(r => r.row_index === i && r.user_id === s.id);
-        return row || { value: '', note: '', who: '' };
+        return { staffId: s.id, row: row || { value: '', note: '', who: '' } };
       });
       const cells = ['<td>' + def.name + '</td>', '<td>' + def.unit + '</td>']
-        .concat(perStaff.map(row => {
-          const title = row.note ? (' title="Ghi chú: ' + row.note.replace(/"/g,'&quot;') + '"') : '';
-          return '<td class="col-num"' + title + '>' + (row.value || '') + '</td>';
-        }))
-        .concat(['<td class="col-num col-total">' + sumValues(perStaff.map(r => r.value)) + '</td>']);
+        .concat(perStaff.map(({ staffId, row }) =>
+          '<td class="col-num">' +
+            '<div class="editable-value" contenteditable="true" data-row="' + i + '" data-user="' + staffId + '" data-field="value">' + escapeHtml(row.value) + '</div>' +
+            '<div class="cell-note editable-note" contenteditable="true" data-row="' + i + '" data-user="' + staffId + '" data-field="note">' + escapeHtml(row.note) + '</div>' +
+          '</td>'
+        ))
+        .concat(['<td class="col-num col-total">' + sumValues(perStaff.map(p => p.row.value)) + '</td>']);
       const tr = document.createElement('tr');
       tr.innerHTML = cells.join('');
       tbody.appendChild(tr);
     });
+    bindCellEvents();
   }
 
   function bindCellEvents(){
-    tbody.querySelectorAll('td[contenteditable="true"]').forEach(cell => {
+    tbody.querySelectorAll('[contenteditable="true"]').forEach(cell => {
       cell.addEventListener('focus', () => {
         if (!currentUser) cell.blur();
       });
@@ -737,24 +864,27 @@ const DEFAULT_ROWS = [
         if (!currentUser) return;
         const rowIndex = parseInt(cell.getAttribute('data-row'), 10);
         const field = cell.getAttribute('data-field');
+        const targetUserId = cell.getAttribute('data-user') || currentUser.id;
         const value = cell.textContent.trim();
         const who = userName + ' · ' + nowStamp();
 
         cell.classList.add('flash-mine');
         setTimeout(() => cell.classList.remove('flash-mine'), 900);
-        cell.closest('tr').querySelector('.col-who').textContent = who;
+        const whoCell = cell.closest('tr').querySelector('.col-who');
+        if (whoCell) whoCell.textContent = who;
 
         const payload = {
           report_date: currentDate,
           row_index: rowIndex,
-          user_id: currentUser.id,
+          user_id: targetUserId,
           kpi_name: DEFAULT_ROWS[rowIndex].name,
           unit: DEFAULT_ROWS[rowIndex].unit,
           who,
           updated_at: new Date().toISOString()
         };
         payload[field] = value;
-        await sb.from('daily_reports').upsert(payload, { onConflict: 'report_date,row_index,user_id' });
+        const { error } = await sb.from('daily_reports').upsert(payload, { onConflict: 'report_date,row_index,user_id' });
+        if (error) alert('Không lưu được: ' + error.message);
       });
     });
   }
@@ -774,27 +904,225 @@ const DEFAULT_ROWS = [
     renderLeaderView();
   }
 
+  function setLeaderPanels(mode){
+    tableWrap.style.display = (mode === 'dashboard') ? 'none' : '';
+    dashboardGrid.style.display = (mode === 'dashboard') ? 'grid' : 'none';
+    periodToggle.style.display = (mode === 'dashboard') ? 'flex' : 'none';
+  }
+
   function renderLeaderView(){
     if (leaderViewMode === 'detail') {
       renderLeaderRows(lastLeaderRows);
-    } else {
+    } else if (leaderViewMode === 'summary') {
       renderLeaderSummary(lastLeaderRows);
+    }
+    // 'dashboard' mode renders via loadDashboard() instead (needs its own date-range fetch).
+  }
+
+  function switchLeaderMode(mode){
+    leaderViewMode = mode;
+    [viewSummaryBtn, viewDetailBtn, viewDashboardBtn].forEach(btn => btn.classList.remove('active'));
+    ({ summary: viewSummaryBtn, detail: viewDetailBtn, dashboard: viewDashboardBtn }[mode]).classList.add('active');
+    setLeaderPanels(mode);
+    if (mode === 'dashboard') {
+      loadDashboard(summaryPeriod, currentDate);
+    } else {
+      renderLeaderView();
     }
   }
 
-  viewSummaryBtn.addEventListener('click', () => {
-    leaderViewMode = 'summary';
-    viewSummaryBtn.classList.add('active');
-    viewDetailBtn.classList.remove('active');
-    renderLeaderView();
+  viewSummaryBtn.addEventListener('click', () => switchLeaderMode('summary'));
+  viewDetailBtn.addEventListener('click', () => switchLeaderMode('detail'));
+  viewDashboardBtn.addEventListener('click', () => switchLeaderMode('dashboard'));
+
+  periodToggle.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      summaryPeriod = btn.getAttribute('data-period');
+      periodToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+      loadDashboard(summaryPeriod, currentDate);
+    });
   });
 
-  viewDetailBtn.addEventListener('click', () => {
-    leaderViewMode = 'detail';
-    viewDetailBtn.classList.add('active');
-    viewSummaryBtn.classList.remove('active');
-    renderLeaderView();
-  });
+  // ---- Dashboard: tổng hợp theo tuần/tháng/năm, hiển thị dạng biểu đồ mỗi KPI ----
+
+  function toISO(d){
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  function getWeekDays(dateStr){
+    const d = new Date(dateStr + 'T00:00:00');
+    const day = d.getDay(); // 0=CN,1=T2,...6=T7
+    const diffToMonday = (day === 0 ? -6 : 1 - day);
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMonday);
+    const labels = ['T2','T3','T4','T5','T6','T7','CN'];
+    return labels.map((label, i) => {
+      const dt = new Date(monday);
+      dt.setDate(monday.getDate() + i);
+      return { label, start: toISO(dt), end: toISO(dt) };
+    });
+  }
+
+  function getMonthDays(dateStr){
+    const d = new Date(dateStr + 'T00:00:00');
+    const year = d.getFullYear(), month = d.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const buckets = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = toISO(new Date(year, month, day));
+      buckets.push({ label: String(day), start: iso, end: iso });
+    }
+    return buckets;
+  }
+
+  function getYearMonths(dateStr){
+    const year = parseInt(dateStr.slice(0, 4), 10);
+    return Array.from({ length: 12 }, (_, m) => {
+      const start = year + '-' + String(m+1).padStart(2,'0') + '-01';
+      const lastDay = new Date(year, m+1, 0).getDate();
+      const end = year + '-' + String(m+1).padStart(2,'0') + '-' + String(lastDay).padStart(2,'0');
+      return { label: 'T' + (m+1), start, end };
+    });
+  }
+
+  async function loadDashboard(period, anchorDate){
+    const buckets = period === 'week' ? getWeekDays(anchorDate)
+      : period === 'month' ? getMonthDays(anchorDate)
+      : getYearMonths(anchorDate);
+
+    liveDot.classList.remove('on');
+    liveText.textContent = 'Xem theo ' + (PERIOD_LABEL[period] || period) + ' — không realtime';
+
+    const { data: rows, error } = await sb
+      .from('daily_reports')
+      .select('report_date, row_index, value')
+      .gte('report_date', buckets[0].start)
+      .lte('report_date', buckets[buckets.length - 1].end);
+
+    if (error) {
+      dashboardGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:var(--muted)">Không tải được dữ liệu: ' + escapeHtml(error.message) + '</p>';
+      return;
+    }
+    renderDashboard(buckets, rows || []);
+  }
+
+  function niceCeil(v){
+    if (v <= 0) return 1;
+    const pow = Math.pow(10, Math.floor(Math.log10(v)));
+    const norm = v / pow;
+    const niceNorm = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+    return niceNorm * pow;
+  }
+
+  function formatCompact(v){
+    const rounded = Math.round(v * 100) / 100;
+    return rounded.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+  }
+
+  function renderDashboard(buckets, rows){
+    dashboardGrid.innerHTML = '';
+    DEFAULT_ROWS.forEach((def, kpiIndex) => {
+      const points = buckets.map(b => {
+        const sum = rows
+          .filter(r => r.row_index === kpiIndex && r.report_date >= b.start && r.report_date <= b.end)
+          .reduce((acc, r) => acc + (parseFloat(String(r.value || '').replace(',', '.')) || 0), 0);
+        return { label: b.label, value: sum };
+      });
+      const card = document.createElement('div');
+      card.className = 'chart-card';
+      const title = document.createElement('div');
+      title.className = 'chart-title';
+      title.textContent = def.name + ' ';
+      const unit = document.createElement('span');
+      unit.className = 'chart-unit';
+      unit.textContent = '(' + def.unit + ')';
+      title.appendChild(unit);
+      card.appendChild(title);
+      const host = document.createElement('div');
+      card.appendChild(host);
+      dashboardGrid.appendChild(card);
+      renderMiniLineChart(host, points);
+    });
+  }
+
+  function renderMiniLineChart(host, points){
+    const width = 320, height = 150;
+    const padL = 40, padR = 14, padT = 16, padB = 22;
+    const plotW = width - padL - padR;
+    const plotH = height - padT - padB;
+    const n = points.length;
+    const maxV = niceCeil(Math.max(...points.map(p => p.value), 0));
+
+    const xAt = i => n === 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW;
+    const yAt = v => padT + plotH - (maxV === 0 ? 0 : (v / maxV) * plotH);
+
+    const linePts = points.map((p, i) => xAt(i) + ',' + yAt(p.value)).join(' ');
+    const areaPts = xAt(0) + ',' + (padT + plotH) + ' ' + linePts + ' ' + xAt(n - 1) + ',' + (padT + plotH);
+
+    const gridHtml = [0, maxV / 2, maxV].map(v => {
+      const yy = yAt(v);
+      return '<line x1="' + padL + '" y1="' + yy + '" x2="' + (width - padR) + '" y2="' + yy + '" stroke="var(--border)" stroke-width="1"/>' +
+             '<text x="' + (padL - 6) + '" y="' + (yy + 3) + '" text-anchor="end" font-size="9" fill="var(--muted)">' + escapeHtml(formatCompact(v)) + '</text>';
+    }).join('');
+
+    const showEvery = n <= 12 ? 1 : Math.ceil(n / 6);
+    const xLabelsHtml = points.map((p, i) => {
+      if (i % showEvery !== 0 && i !== n - 1) return '';
+      return '<text x="' + xAt(i) + '" y="' + (height - 5) + '" text-anchor="middle" font-size="9" fill="var(--muted)">' + escapeHtml(p.label) + '</text>';
+    }).join('');
+
+    const dotsHtml = points.map((p, i) =>
+      '<circle data-i="' + i + '" cx="' + xAt(i) + '" cy="' + yAt(p.value) + '" r="3" fill="var(--blue)" stroke="#fff" stroke-width="2"/>'
+    ).join('');
+
+    const last = points[n - 1];
+    const endLabelHtml = '<text x="' + xAt(n - 1) + '" y="' + (yAt(last.value) - 8) + '" text-anchor="end" font-size="10" font-weight="700" fill="var(--text)">' + escapeHtml(formatCompact(last.value)) + '</text>';
+
+    host.className = 'chart-host';
+    host.innerHTML =
+      '<svg viewBox="0 0 ' + width + ' ' + height + '" class="chart-svg">' +
+        gridHtml +
+        '<polygon points="' + areaPts + '" fill="var(--blue)" opacity="0.10"/>' +
+        '<polyline points="' + linePts + '" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+        dotsHtml +
+        xLabelsHtml +
+        endLabelHtml +
+        '<line class="crosshair" x1="0" y1="' + padT + '" x2="0" y2="' + (padT + plotH) + '" stroke="var(--muted)" stroke-width="1" style="display:none"/>' +
+      '</svg>' +
+      '<div class="chart-tooltip" style="display:none"></div>';
+
+    const svgEl = host.querySelector('svg');
+    const crosshair = host.querySelector('.crosshair');
+    const tooltip = host.querySelector('.chart-tooltip');
+
+    function handleMove(evt){
+      const rect = svgEl.getBoundingClientRect();
+      const px = (evt.clientX - rect.left) * (width / rect.width);
+      let idx = Math.round(((px - padL) / plotW) * (n - 1));
+      idx = Math.max(0, Math.min(n - 1, idx));
+      const p = points[idx];
+      const cx = xAt(idx);
+      crosshair.setAttribute('x1', cx);
+      crosshair.setAttribute('x2', cx);
+      crosshair.style.display = '';
+      tooltip.style.display = '';
+      tooltip.textContent = '';
+      const strong = document.createElement('strong');
+      strong.textContent = formatCompact(p.value);
+      const br = document.createElement('br');
+      const span = document.createElement('span');
+      span.textContent = p.label;
+      tooltip.appendChild(strong);
+      tooltip.appendChild(br);
+      tooltip.appendChild(span);
+      tooltip.style.left = ((cx / width) * 100) + '%';
+    }
+    svgEl.addEventListener('pointermove', handleMove);
+    svgEl.addEventListener('pointerleave', () => {
+      crosshair.style.display = 'none';
+      tooltip.style.display = 'none';
+    });
+  }
 
   async function loadDate(date){
     currentDate = date;
@@ -802,6 +1130,11 @@ const DEFAULT_ROWS = [
     if (currentChannel) {
       await sb.removeChannel(currentChannel);
       currentChannel = null;
+    }
+
+    if (currentRole === 'leader' && leaderViewMode === 'dashboard') {
+      await loadDashboard(summaryPeriod, date);
+      return; // dữ liệu nhiều ngày cộng dồn — không cần (và không nên) subscribe realtime
     }
 
     if (currentRole === 'leader') {

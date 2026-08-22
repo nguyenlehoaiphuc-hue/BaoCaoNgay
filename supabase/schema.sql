@@ -64,14 +64,32 @@ create policy "select own or dept leader" on daily_reports
     )
   );
 
-create policy "staff insert own" on daily_reports
+-- Nhân viên tự ghi số của mình; lãnh đạo cũng ghi/sửa được số của nhân viên cùng phòng ban
+-- (dùng ở chế độ "Xem chi tiết" để lãnh đạo chỉnh lại số liệu khi cần).
+create policy "insert own or dept leader" on daily_reports
   for insert with check (
-    auth.uid() = user_id and coalesce(public.current_role(), 'staff') <> 'leader'
+    auth.uid() = user_id
+    or (
+      public.current_role() = 'leader'
+      and exists (
+        select 1 from public.profiles p
+        where p.id = daily_reports.user_id
+          and p.department = public.current_department()
+      )
+    )
   );
 
-create policy "staff update own" on daily_reports
+create policy "update own or dept leader" on daily_reports
   for update using (
-    auth.uid() = user_id and coalesce(public.current_role(), 'staff') <> 'leader'
+    auth.uid() = user_id
+    or (
+      public.current_role() = 'leader'
+      and exists (
+        select 1 from public.profiles p
+        where p.id = daily_reports.user_id
+          and p.department = public.current_department()
+      )
+    )
   );
 
 -- Bật realtime cho bảng (nếu không bật được qua UI Table Editor).
