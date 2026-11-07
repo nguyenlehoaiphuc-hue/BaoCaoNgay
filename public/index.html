@@ -6,6 +6,7 @@
 <title>Báo cáo hàng ngày</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root{
     --blue: #4472C4;
@@ -579,7 +580,7 @@
   <div class="export-panel" id="exportPanel">
     <label>Từ ngày <input type="date" id="exportFrom"></label>
     <label>Đến ngày <input type="date" id="exportTo"></label>
-    <button type="button" id="exportRunBtn">⬇ Tải file Excel (CSV)</button>
+    <button type="button" id="exportRunBtn">⬇ Tải file Excel</button>
     <span class="export-msg" id="exportMsg">Tối đa 12 tháng mỗi lần xuất.</span>
   </div>
 
@@ -1325,8 +1326,10 @@ const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
     }
   });
 
-  function csvCell(v){
-    return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  // Ngày dạng số serial của Excel để cột ngày lọc/sắp xếp được (tránh lệch múi giờ khi dùng Date).
+  function excelDateCell(iso){
+    const [y, m, d] = iso.split('-').map(Number);
+    return { t: 'n', v: (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000, z: 'dd/mm/yyyy' };
   }
 
   exportRunBtn.addEventListener('click', async () => {
@@ -1380,11 +1383,11 @@ const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
       );
 
       const header = ['Ngày báo cáo', 'Phòng ban', 'Nhân viên', 'Chỉ tiêu KPI', 'Đơn vị tính', 'Thực hiện', 'Ghi chú', 'Người cập nhật'];
-      const lines = [header.map(csvCell).join(',')];
+      const aoa = [header];
       rows.forEach(r => {
         const def = ROW_BY_ID[r.row_index];
-        lines.push([
-          r.report_date.split('-').reverse().join('/'),
+        aoa.push([
+          excelDateCell(r.report_date),
           r.room || '',
           names[r.user_id] || '',
           def ? def.name : ('Chỉ tiêu #' + r.row_index),
@@ -1392,17 +1395,16 @@ const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
           r.value || '',
           r.note || '',
           r.who || ''
-        ].map(csvCell).join(','));
+        ]);
       });
 
-      const csv = '﻿' + lines.join('\r\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'so-lieu-' + (currentDepartment || 'bao-cao') + '-' + from + '_' + to + '.csv';
-      a.click();
-      URL.revokeObjectURL(url);
+      // Cột "Thực hiện" giữ nguyên dạng chữ như người dùng gõ (vd "0,6", "1tr3"), không ép sang số.
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [12, 20, 26, 32, 12, 12, 45, 30].map(w => ({ wch: w }));
+      ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }) };
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'So lieu');
+      XLSX.writeFile(wb, 'so-lieu-' + (currentDepartment || 'bao-cao') + '-' + from + '_' + to + '.xlsx');
       setExportMsg('Đã xuất ' + rows.length + ' dòng số liệu.', 'ok');
     } catch (err) {
       setExportMsg('Không xuất được: ' + (err.message || err), 'error');
