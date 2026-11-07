@@ -1279,8 +1279,7 @@ const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
   });
 
   // ---- Xuất số liệu theo khoảng ngày (tối đa 12 tháng) ----
-  // Nhân viên chỉ nhận được số của chính mình, lãnh đạo nhận số của cả phòng ban mình —
-  // việc giới hạn này do Row Level Security trên Supabase đảm nhận.
+  // Mọi tài khoản đều xuất được số liệu của tất cả phòng ban (qua hàm export_daily_reports).
   const exportToggleBtn = document.getElementById('exportToggleBtn');
   const exportPanel = document.getElementById('exportPanel');
   const exportFrom = document.getElementById('exportFrom');
@@ -1348,16 +1347,12 @@ const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
     exportRunBtn.textContent = 'Đang tải...';
     setExportMsg('');
     try {
+      // Gọi hàm export_daily_reports trên Supabase: trả số liệu của TẤT CẢ phòng ban (kèm tên
+      // nhân viên), không bị RLS giới hạn như các màn hình xem/nhập.
       let rows = [];
       for (let offset = 0; ; offset += EXPORT_PAGE_SIZE) {
         const { data, error } = await sb
-          .from('daily_reports')
-          .select('report_date, row_index, user_id, value, note, who, room')
-          .gte('report_date', from)
-          .lte('report_date', to)
-          .order('report_date', { ascending: true })
-          .order('user_id', { ascending: true })
-          .order('row_index', { ascending: true })
+          .rpc('export_daily_reports', { p_from: from, p_to: to })
           .range(offset, offset + EXPORT_PAGE_SIZE - 1);
         if (error) throw error;
         rows = rows.concat(data || []);
@@ -1366,19 +1361,12 @@ const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
 
       if (!rows.length) { setExportMsg('Không có số liệu trong khoảng ngày đã chọn.', 'error'); return; }
 
-      const ids = Array.from(new Set(rows.map(r => r.user_id)));
-      const names = {};
-      for (let i = 0; i < ids.length; i += 200) {
-        const { data: profs } = await sb.from('profiles').select('id, full_name').in('id', ids.slice(i, i + 200));
-        (profs || []).forEach(p => { names[p.id] = p.full_name || ''; });
-      }
-
       const order = {};
       DEFAULT_ROWS.forEach((def, pos) => { order[def.id] = pos; });
       rows.sort((a, b) =>
         a.report_date.localeCompare(b.report_date) ||
         String(a.room || '').localeCompare(String(b.room || ''), 'vi') ||
-        String(names[a.user_id] || '').localeCompare(String(names[b.user_id] || ''), 'vi') ||
+        String(a.full_name || '').localeCompare(String(b.full_name || ''), 'vi') ||
         ((order[a.row_index] ?? 999) - (order[b.row_index] ?? 999))
       );
 
@@ -1389,7 +1377,7 @@ const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
         aoa.push([
           excelDateCell(r.report_date),
           r.room || '',
-          names[r.user_id] || '',
+          r.full_name || '',
           def ? def.name : ('Chỉ tiêu #' + r.row_index),
           def ? def.unit : '',
           r.value || '',
@@ -1404,7 +1392,7 @@ const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
       ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }) };
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'So lieu');
-      XLSX.writeFile(wb, 'so-lieu-' + (currentDepartment || 'bao-cao') + '-' + from + '_' + to + '.xlsx');
+      XLSX.writeFile(wb, 'so-lieu-tat-ca-phong-ban-' + from + '_' + to + '.xlsx');
       setExportMsg('Đã xuất ' + rows.length + ' dòng số liệu.', 'ok');
     } catch (err) {
       setExportMsg('Không xuất được: ' + (err.message || err), 'error');
