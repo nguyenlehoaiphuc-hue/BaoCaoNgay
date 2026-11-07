@@ -96,6 +96,32 @@
   .pw-msg.error{ color: #b42318; }
   .pw-msg.ok{ color: var(--live); }
 
+  .export-panel{
+    display: none;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    background: #F5F8FE;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 14px 0 0;
+    font-size: 12.5px;
+  }
+  .export-panel.show{ display: flex; }
+  .export-panel label{ display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  .export-panel input{
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font: inherit;
+  }
+  .export-panel button{ padding: 7px 14px; font-size: 12.5px; }
+  .export-msg{ font-size: 12px; color: var(--muted); width: 100%; text-align: center; }
+  .export-msg.error{ color: #b42318; }
+  .export-msg.ok{ color: var(--live); }
+
   #reportCapture{
     background: #fff;
     padding: 6px 2px 2px;
@@ -421,7 +447,7 @@
   @media print{
     body{ background: #fff; padding: 0; }
     .sheet{ box-shadow: none; padding: 0; }
-    .toolbar, .hint, .status, .pw-change{ display: none; }
+    .toolbar, .hint, .status, .pw-change, .export-panel{ display: none; }
   }
 
   @media (max-width: 640px){
@@ -547,6 +573,14 @@
     <button class="secondary" id="imageBtn">📷 Xuất ảnh</button>
     <button class="secondary" id="csvBtn">⬇ Xuất CSV</button>
     <button class="secondary" id="printBtn">🖨 In / PDF</button>
+    <button class="secondary" id="exportToggleBtn">📑 Xuất số liệu</button>
+  </div>
+
+  <div class="export-panel" id="exportPanel">
+    <label>Từ ngày <input type="date" id="exportFrom"></label>
+    <label>Đến ngày <input type="date" id="exportTo"></label>
+    <button type="button" id="exportRunBtn">⬇ Tải file Excel (CSV)</button>
+    <span class="export-msg" id="exportMsg">Tối đa 12 tháng mỗi lần xuất.</span>
   </div>
 
   <div class="hint">
@@ -1241,6 +1275,141 @@ const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
     a.download = 'bao-cao-' + (currentDepartment || 'ngay') + '-' + (currentDate || 'export') + '.csv';
     a.click();
     URL.revokeObjectURL(url);
+  });
+
+  // ---- Xuất số liệu theo khoảng ngày (tối đa 12 tháng) ----
+  // Nhân viên chỉ nhận được số của chính mình, lãnh đạo nhận số của cả phòng ban mình —
+  // việc giới hạn này do Row Level Security trên Supabase đảm nhận.
+  const exportToggleBtn = document.getElementById('exportToggleBtn');
+  const exportPanel = document.getElementById('exportPanel');
+  const exportFrom = document.getElementById('exportFrom');
+  const exportTo = document.getElementById('exportTo');
+  const exportRunBtn = document.getElementById('exportRunBtn');
+  const exportMsg = document.getElementById('exportMsg');
+  const EXPORT_MAX_MONTHS = 12;
+  const EXPORT_PAGE_SIZE = 1000; // Supabase trả tối đa 1000 dòng mỗi lần gọi
+
+  // Ngày cuối cùng được phép chọn = ngày bắt đầu + 12 tháng - 1 ngày (vd 15/01/2026 → 14/01/2027).
+  function exportMaxEnd(startISO){
+    const d = new Date(startISO + 'T00:00:00');
+    const limit = new Date(d.getFullYear(), d.getMonth() + EXPORT_MAX_MONTHS, d.getDate() - 1);
+    return toISO(limit);
+  }
+
+  function setExportMsg(text, kind){
+    exportMsg.textContent = text;
+    exportMsg.className = 'export-msg' + (kind ? ' ' + kind : '');
+  }
+
+  exportToggleBtn.addEventListener('click', () => {
+    if (!exportPanel.classList.contains('show')) {
+      const end = currentDate || todayISO();
+      const startD = new Date(end + 'T00:00:00');
+      startD.setDate(1);
+      if (!exportFrom.value) exportFrom.value = toISO(startD);
+      if (!exportTo.value) exportTo.value = end;
+      exportTo.min = exportFrom.value;
+      exportTo.max = exportMaxEnd(exportFrom.value);
+      setExportMsg('Tối đa ' + EXPORT_MAX_MONTHS + ' tháng mỗi lần xuất.');
+    }
+    exportPanel.classList.toggle('show');
+  });
+
+  exportFrom.addEventListener('change', () => {
+    if (!exportFrom.value) return;
+    exportTo.min = exportFrom.value;
+    exportTo.max = exportMaxEnd(exportFrom.value);
+    if (exportTo.value && (exportTo.value < exportTo.min || exportTo.value > exportTo.max)) {
+      exportTo.value = exportTo.max < todayISO() ? exportTo.max : todayISO();
+      if (exportTo.value < exportTo.min) exportTo.value = exportTo.min;
+    }
+  });
+
+  function csvCell(v){
+    return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  }
+
+  exportRunBtn.addEventListener('click', async () => {
+    if (!currentUser) return;
+    const from = exportFrom.value, to = exportTo.value;
+    if (!from || !to) { setExportMsg('Vui lòng chọn đủ ngày bắt đầu và ngày kết thúc.', 'error'); return; }
+    if (to < from) { setExportMsg('Ngày kết thúc phải sau hoặc bằng ngày bắt đầu.', 'error'); return; }
+    if (to > exportMaxEnd(from)) {
+      setExportMsg('Khoảng thời gian vượt quá ' + EXPORT_MAX_MONTHS + ' tháng — chọn đến ngày ' +
+        exportMaxEnd(from).split('-').reverse().join('/') + ' là tối đa.', 'error');
+      return;
+    }
+
+    const original = exportRunBtn.textContent;
+    exportRunBtn.disabled = true;
+    exportRunBtn.textContent = 'Đang tải...';
+    setExportMsg('');
+    try {
+      let rows = [];
+      for (let offset = 0; ; offset += EXPORT_PAGE_SIZE) {
+        const { data, error } = await sb
+          .from('daily_reports')
+          .select('report_date, row_index, user_id, value, note, who, room')
+          .gte('report_date', from)
+          .lte('report_date', to)
+          .order('report_date', { ascending: true })
+          .order('user_id', { ascending: true })
+          .order('row_index', { ascending: true })
+          .range(offset, offset + EXPORT_PAGE_SIZE - 1);
+        if (error) throw error;
+        rows = rows.concat(data || []);
+        if (!data || data.length < EXPORT_PAGE_SIZE) break;
+      }
+
+      if (!rows.length) { setExportMsg('Không có số liệu trong khoảng ngày đã chọn.', 'error'); return; }
+
+      const ids = Array.from(new Set(rows.map(r => r.user_id)));
+      const names = {};
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data: profs } = await sb.from('profiles').select('id, full_name').in('id', ids.slice(i, i + 200));
+        (profs || []).forEach(p => { names[p.id] = p.full_name || ''; });
+      }
+
+      const order = {};
+      DEFAULT_ROWS.forEach((def, pos) => { order[def.id] = pos; });
+      rows.sort((a, b) =>
+        a.report_date.localeCompare(b.report_date) ||
+        String(a.room || '').localeCompare(String(b.room || ''), 'vi') ||
+        String(names[a.user_id] || '').localeCompare(String(names[b.user_id] || ''), 'vi') ||
+        ((order[a.row_index] ?? 999) - (order[b.row_index] ?? 999))
+      );
+
+      const header = ['Ngày báo cáo', 'Phòng ban', 'Nhân viên', 'Chỉ tiêu KPI', 'Đơn vị tính', 'Thực hiện', 'Ghi chú', 'Người cập nhật'];
+      const lines = [header.map(csvCell).join(',')];
+      rows.forEach(r => {
+        const def = ROW_BY_ID[r.row_index];
+        lines.push([
+          r.report_date.split('-').reverse().join('/'),
+          r.room || '',
+          names[r.user_id] || '',
+          def ? def.name : ('Chỉ tiêu #' + r.row_index),
+          def ? def.unit : '',
+          r.value || '',
+          r.note || '',
+          r.who || ''
+        ].map(csvCell).join(','));
+      });
+
+      const csv = '﻿' + lines.join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'so-lieu-' + (currentDepartment || 'bao-cao') + '-' + from + '_' + to + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportMsg('Đã xuất ' + rows.length + ' dòng số liệu.', 'ok');
+    } catch (err) {
+      setExportMsg('Không xuất được: ' + (err.message || err), 'error');
+    } finally {
+      exportRunBtn.disabled = false;
+      exportRunBtn.textContent = original;
+    }
   });
 
   // --- init ---
