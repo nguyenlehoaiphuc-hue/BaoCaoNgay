@@ -565,16 +565,20 @@ const SUPABASE_ANON_KEY = 'sb_publishable_zNmbMbsyeOyC_M6mI5xh4A_NSUJIK7F';
 // "tenuser@baocaongay.local" (đúng domain bên dưới) và người dùng chỉ cần gõ "tenuser".
 const LOGIN_DOMAIN = 'baocaongay.local';
 
+// "id" là row_index lưu trong daily_reports — cố định cho từng chỉ tiêu, KHÔNG đổi số cũ.
+// Thứ tự hiển thị là thứ tự trong mảng; chỉ tiêu mới thì lấy id tiếp theo (hiện tại là 9).
 const DEFAULT_ROWS = [
-  { name: 'Số lượng KH mới', unit: 'Khách hàng' },
-  { name: 'Delta tăng trưởng dư nợ tín dụng', unit: 'Tỷ đồng' },
-  { name: 'Delta tăng trưởng Nguồn vốn', unit: 'Tỷ đồng' },
-  { name: 'Tăng thu phí', unit: 'Triệu đồng' },
-  { name: 'Lợi nhuận kinh doanh ngoại tệ', unit: 'Triệu đồng' },
-  { name: 'Thu hồi nợ Nhóm 2, NX, XLRR', unit: 'Triệu đồng' },
-  { name: 'Doanh thu Bảo hiểm VBI', unit: 'Triệu đồng' },
-  { name: 'Doanh thu Bảo hiểm MVL', unit: 'Triệu đồng' }
+  { id: 0, name: 'Số lượng KH mới', unit: 'Khách hàng' },
+  { id: 1, name: 'Delta tăng trưởng dư nợ tín dụng', unit: 'Tỷ đồng' },
+  { id: 2, name: 'Delta tăng trưởng Nguồn vốn', unit: 'Tỷ đồng' },
+  { id: 8, name: 'Delta tăng trưởng Casa', unit: 'Tỷ đồng' },
+  { id: 3, name: 'Tăng thu phí', unit: 'Triệu đồng' },
+  { id: 4, name: 'Lợi nhuận kinh doanh ngoại tệ', unit: 'Triệu đồng' },
+  { id: 5, name: 'Thu hồi nợ Nhóm 2, NX, XLRR', unit: 'Triệu đồng' },
+  { id: 6, name: 'Doanh thu Bảo hiểm VBI', unit: 'Triệu đồng' },
+  { id: 7, name: 'Doanh thu Bảo hiểm MVL', unit: 'Triệu đồng' }
 ];
+const ROW_BY_ID = Object.fromEntries(DEFAULT_ROWS.map(r => [r.id, r]));
 
 (function(){
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -775,7 +779,8 @@ const DEFAULT_ROWS = [
   function renderStaffRows(rows){
     thead.innerHTML = STAFF_HEAD;
     tbody.innerHTML = '';
-    DEFAULT_ROWS.forEach((def, i) => {
+    DEFAULT_ROWS.forEach(def => {
+      const i = def.id;
       const row = rows.find(r => r.row_index === i) || { value: '', note: '', who: '' };
       const tr = document.createElement('tr');
       tr.innerHTML =
@@ -807,7 +812,8 @@ const DEFAULT_ROWS = [
       '</tr>';
 
     tbody.innerHTML = '';
-    DEFAULT_ROWS.forEach((def, i) => {
+    DEFAULT_ROWS.forEach(def => {
+      const i = def.id;
       const rowsForKpi = allRows.filter(r => r.row_index === i);
       const values = rowsForKpi.map(r => r.value);
       const notesHtml = rowsForKpi
@@ -835,7 +841,8 @@ const DEFAULT_ROWS = [
     thead.innerHTML = '<tr>' + headCells.join('') + '</tr>';
 
     tbody.innerHTML = '';
-    DEFAULT_ROWS.forEach((def, i) => {
+    DEFAULT_ROWS.forEach(def => {
+      const i = def.id;
       const perStaff = staffList.map(s => {
         const row = allRows.find(r => r.row_index === i && r.user_id === s.id);
         return { staffId: s.id, row: row || { value: '', note: '', who: '' } };
@@ -877,8 +884,8 @@ const DEFAULT_ROWS = [
           report_date: currentDate,
           row_index: rowIndex,
           user_id: targetUserId,
-          kpi_name: DEFAULT_ROWS[rowIndex].name,
-          unit: DEFAULT_ROWS[rowIndex].unit,
+          kpi_name: ROW_BY_ID[rowIndex].name,
+          unit: ROW_BY_ID[rowIndex].unit,
           who,
           updated_at: new Date().toISOString()
         };
@@ -1021,7 +1028,8 @@ const DEFAULT_ROWS = [
 
   function renderDashboard(buckets, rows){
     dashboardGrid.innerHTML = '';
-    DEFAULT_ROWS.forEach((def, kpiIndex) => {
+    DEFAULT_ROWS.forEach(def => {
+      const kpiIndex = def.id;
       const points = buckets.map(b => {
         const sum = rows
           .filter(r => r.row_index === kpiIndex && r.report_date >= b.start && r.report_date <= b.end)
